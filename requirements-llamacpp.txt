@@ -1,0 +1,17 @@
+# Opcional: so necessario para LLM_TYPE=llamacpp.
+#   pip install -r requirements-llamacpp.txt
+#
+# Separado do requirements.txt de proposito: no Windows o PyPI so tem o codigo
+# fonte do llama-cpp-python, e o pip tenta COMPILAR o llama.cpp (exige Visual
+# Studio Build Tools com C++ e CMake). O run_local.bat instala o
+# requirements.txt a cada execucao — com a lib la, quem so usa o Gemini teria a
+# subida da API quebrada por um compilador que nao precisa.
+#
+# O indice abaixo tem wheels pre-compiladas para CPU, que evitam a compilacao
+# quando existe wheel para a sua versao do Python. Para GPU NVIDIA, troque
+# "cpu" por "cu121"/"cu124" conforme o CUDA instalado.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+# 0.3.9+ por causa da arquitetura qwen3: abaixo disso so da para testar os
+# modelos da familia Qwen2.5/Llama 3.x, e trocar de modelo vira trocar de lib.
+llama-cpp-python>=0.3.9

@@ -3,7 +3,8 @@ Provedores de LLM (padrao Strategy).
 
 A regra de negocio nao sabe qual modelo esta atendendo: ela recebe um
 LLMProvider e chama `generate(prompt)`. Trocar Gemini por Ollama e mudar a
-variavel de ambiente LLM_TYPE, nada mais.
+variavel de ambiente LLM_TYPE, nada mais. O provedor llama.cpp (inferencia em
+processo, sem daemon) mora em llama_cpp_provider.py.
 
 O prompt e montado num lugar so — o PromptOrchestrator — e chega aqui pronto.
 Provedor cuida de transporte, nunca de conteudo: se cada um montasse o proprio
@@ -11,6 +12,7 @@ prompt, Gemini e Ollama passariam a divergir sem ninguem perceber.
 """
 import logging
 import os
+import sys
 from abc import ABC, abstractmethod
 from functools import lru_cache
 from typing import Any, Dict, Optional
@@ -20,7 +22,12 @@ from dotenv import load_dotenv
 
 from app.services.response_parser import parse_llm_json
 
-load_dotenv()
+# No executavel distribuido (PyInstaller) nao existe .env: a configuracao vem
+# do Unity (variaveis de ambiente) e a chave do Gemini vem do jogador. Pular o
+# load_dotenv ali garante que um .env esquecido perto do executavel — o de
+# desenvolvimento, com a chave do grupo — nunca seja lido no jogo.
+if not getattr(sys, "frozen", False):
+    load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +105,12 @@ class LLMProvider(ABC):
 
     async def aclose(self) -> None:
         """Libera conexoes. Sem efeito em provedores que nao abrem socket."""
+
+    async def aquecer(self, prompt: str) -> None:
+        """
+        Deixa o provedor pronto antes da primeira pergunta. Sem efeito por
+        padrao: so o modelo local tem carga e cache a adiantar.
+        """
 
 
 class MockProvider(LLMProvider):
@@ -194,6 +207,35 @@ class GeminiProvider(LLMProvider):
         self.model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL_PADRAO)
         self.client = genai.Client(api_key=api_key)
 
+    @staticmethod
+    def _erro_de_conta(exc: BaseException) -> Optional[str]:
+        """
+        Chave invalida ou cota esgotada: nao adianta tentar de novo no mesmo
+        turno. Como LLMGenerationError, o orquestrador gastava 3 tentativas e
+        devolvia o fallback generico — o jogador com a chave errada so via o
+        detetive dizendo "Interessante... continue", sem saber por que.
+        """
+        codigo = getattr(exc, "code", None)
+        texto = str(exc).lower()
+        if codigo in (401, 403) or (codigo == 400 and "api key" in texto):
+            return ("A chave do Gemini foi recusada. Confira a chave em "
+                    "Configurações > Detetive (IA).")
+        if codigo == 429:
+            return ("A cota gratuita do Gemini acabou por agora. Espere alguns "
+                    "minutos ou troque para a IA local nas Configurações.")
+        return None
+
+    async def verificar_chave(self) -> None:
+        """Consulta barata (metadados do modelo), sem gastar cota de geração."""
+        try:
+            await self.client.aio.models.get(model=self.model)
+        except Exception as exc:
+            if _e_erro_de_conexao(exc):
+                raise LLMUnavailableError("Sem conexão com a API do Gemini.") from exc
+            raise LLMUnavailableError(
+                self._erro_de_conta(exc) or f"O Gemini recusou a chave: {exc}"
+            ) from exc
+
     async def generate(self, prompt: str) -> Dict[str, Any]:
         try:
             resposta = await self.client.aio.models.generate_content(
@@ -206,6 +248,11 @@ class GeminiProvider(LLMProvider):
                 raise LLMUnavailableError(
                     "Nao foi possivel alcancar a API do Gemini."
                 ) from exc
+
+            erro_de_conta = self._erro_de_conta(exc)
+            if erro_de_conta:
+                logger.error(f"Gemini recusou a conta: {exc}")
+                raise LLMUnavailableError(erro_de_conta) from exc
 
             logger.error(f"Gemini respondeu com erro: {exc}")
             raise LLMGenerationError(str(exc)) from exc
@@ -314,6 +361,18 @@ def get_llm_provider() -> LLMProvider:
     if tipo == "local":
         provider = OllamaProvider()
         logger.info(f"LLM_TYPE=local -> Ollama ({provider.model} em {provider.base_url})")
+        return provider
+
+    if tipo == "llamacpp":
+        # Import aqui dentro: o modulo importa LLMProvider deste arquivo, e no
+        # topo isso seria import circular.
+        from app.services.llama_cpp_provider import LlamaCppProvider
+
+        # So configura: o .gguf e carregado na primeira pergunta, entao um
+        # arquivo ausente vira 503 na rota em vez de derrubar a API aqui.
+        provider = LlamaCppProvider()
+        logger.info(f"LLM_TYPE=llamacpp -> {provider.model_path} "
+                    f"(n_threads={provider.n_threads}, n_gpu_layers={provider.n_gpu_layers})")
         return provider
 
     if tipo == "mock":

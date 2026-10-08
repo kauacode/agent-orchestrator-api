@@ -8,6 +8,15 @@ class InterrogateRequest(BaseModel):
     # caso padrao, entao o cliente atual continua funcionando sem alteracao.
     # Quando a CaseSelectionScene passar o CaseInfo.caseId, e so preencher.
     case_id: Optional[str] = None
+    # IA escolhida nas Configuracoes do jogo: "gemini" ou o id de um modelo do
+    # catalogo (app/content/modelos.json). Ausente = padrao do .env.
+    provider: Optional[str] = None
+    # Chave do Gemini do PROPRIO jogador. Trafega so ate o backend local
+    # (127.0.0.1) e nunca e gravada nem logada pelo servidor.
+    gemini_api_key: Optional[str] = None
+
+class TesteChaveRequest(BaseModel):
+    gemini_api_key: str
 
 class StatusInvestigacao(BaseModel):
     nivel_suspeita: int

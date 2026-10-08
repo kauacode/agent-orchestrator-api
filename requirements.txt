@@ -5,3 +5,5 @@ google-genai==1.68.0
 httpx>=0.27.0
 python-dotenv==1.2.2
 filelock==3.13.1
+# llama-cpp-python (LLM_TYPE=llamacpp) fica em requirements-llamacpp.txt:
+# no Windows ele compila C++ na instalacao. Ver o comentario la.

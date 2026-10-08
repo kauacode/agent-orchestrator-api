@@ -1,0 +1,15 @@
+{
+  "_comentario": "Modelos locais que o jogador pode baixar pelas Configuracoes do jogo. Para oferecer um modelo novo, acrescente uma entrada: repo e arquivo no Hugging Face, tamanho exato em bytes e SHA-256 (o download e conferido contra os dois). O id vira o valor de `provider` na requisicao.",
+  "modelos": [
+    {
+      "id": "qwen2.5-3b",
+      "nome": "Qwen 2.5 3B (local)",
+      "descricao": "Roda no seu computador, offline e de graça. Respostas em 20-30s.",
+      "repo": "Qwen/Qwen2.5-3B-Instruct-GGUF",
+      "arquivo": "qwen2.5-3b-instruct-q4_k_m.gguf",
+      "tamanho_bytes": 2104932768,
+      "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
+      "ram_minima_gb": 8
+    }
+  ]
+}

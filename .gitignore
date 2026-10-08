@@ -7,3 +7,9 @@ venv/
 logs/
 *.log
 .pytest_cache/
+# modelos GGUF do LLM_TYPE=llamacpp (2+ GB cada)
+models/
+*.gguf
+# backend empacotado (scripts/empacotar_backend.py) - produto gerado, nao versionar
+build/
+dist/

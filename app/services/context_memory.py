@@ -128,17 +128,54 @@ class ContextMemoryManager:
 
         return "=== HISTÓRICO DA SESSÃO ===\n" + '\n\n'.join(partes)
 
+    def get_dialogo(self, session_id: str, max_falas: int = 6) -> List[tuple]:
+        """
+        Últimas falas como (papel, texto), sem timestamp.
+
+        Para modelos pequenos. O get_prompt_context manda cada fala duas vezes
+        (resumo e janela se sobrepõem) e com timestamp ISO: no Qwen 2.5 3B isso
+        fez o detetive copiar palavra por palavra a própria fala anterior, que
+        era a coisa mais repetida do prompt. Também é ~1/3 dos tokens.
+        """
+        falas = []
+        for linha in self.load_session_md(session_id).splitlines():
+            if not linha.strip():
+                continue
+            fim_colchete = linha.find(']')
+            resto = linha[fim_colchete + 1:].strip() if fim_colchete != -1 else linha
+            papel = ""
+            if resto.startswith('(') and ')' in resto:
+                papel = resto[1:resto.index(')')]
+            falas.append((papel, self._texto_sem_cabecalho(linha)))
+        return falas[-max_falas:]
+
+    def finalizar_sessao(self, session_id: str) -> bool:
+        """
+        Apaga tudo da partida: historico, suspeita/contradicoes e o .lock.
+
+        Cada partida e unica — uma partida nova nunca continua a anterior. Sem
+        isto os arquivos ficavam para tras, e uma sessao reaproveitada por
+        engano herdava a suspeita alta e ja nascia perdida.
+        """
+        md = self._session_md_path(session_id)
+        removeu = False
+        for caminho in (md, self._session_version_path(session_id), md.with_suffix('.lock')):
+            try:
+                if caminho.exists():
+                    caminho.unlink()
+                    removeu = True
+            except OSError:
+                pass
+        return removeu
+
     def cleanup_old_sessions(self, max_age_days: int = 30) -> int:
+        """`max_age_days=0` apaga todas as sessoes."""
         apagados = 0
         limite = datetime.now().timestamp() - (max_age_days * 24 * 60 * 60)
 
         for arquivo in self.storage_dir.glob("*_depoimento.md"):
-            if arquivo.stat().st_mtime < limite:
-                arquivo.unlink()
-                
-                arquivo_versao = self._session_version_path(arquivo.stem.replace('_depoimento', ''))
-                if arquivo_versao.exists():
-                    arquivo_versao.unlink()
+            if arquivo.stat().st_mtime <= limite:
+                self.finalizar_sessao(arquivo.stem.replace('_depoimento', ''))
                 apagados += 1
 
         return apagados
