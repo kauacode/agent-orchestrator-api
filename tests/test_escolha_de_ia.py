@@ -279,6 +279,116 @@ class _ErroApi(Exception):
 def test_chave_invalida_do_gemini_tem_mensagem_propria():
     msg = GeminiProvider._erro_de_conta(_ErroApi(400, "API key not valid. Please pass a valid API key."))
     assert msg and "chave" in msg.lower()
-    assert GeminiProvider._erro_de_conta(_ErroApi(429, "Resource exhausted")) is not None
+    # Cota (429) nao e erro de conta: a reserva tem cota propria (ver abaixo).
+    assert GeminiProvider._erro_de_conta(_ErroApi(429, "Resource exhausted")) is None
     # Outros erros continuam recuperaveis (retry do orquestrador).
     assert GeminiProvider._erro_de_conta(_ErroApi(500, "internal")) is None
+
+
+# ─── Sobrecarga e lentidao do Gemini ────────────────────────────────────────
+
+RESPOSTA_GEMINI = (
+    '{"id_turno": 1, "texto_detetive": "Onde o senhor estava?", '
+    '"status_investigacao": {"nivel_suspeita": 30, "congelar_input": false, '
+    '"detectou_mentira": false, "fim_de_jogo": false}, '
+    '"feedback_visual": {"cor_iluminacao": "#FFFFFF", "bpm_musica": 90, "animacao_trigger": "Neutral"}}'
+)
+
+
+class _RespostaFalsa:
+    text = RESPOSTA_GEMINI
+
+
+def _gemini_com(comportamentos, timeout=0.2):
+    """comportamentos[i]: o que a i-esima chamada faz — Exception, 'lento' ou 'ok'."""
+    provedor = GeminiProvider("chave", model="principal", modelo_reserva="reserva", timeout=timeout)
+    chamados = []
+
+    async def _gerar(modelo, prompt):
+        chamados.append(modelo)
+        acao = comportamentos[len(chamados) - 1]
+        if acao == "lento":
+            await asyncio.sleep(5)
+        if isinstance(acao, Exception):
+            raise acao
+        return _RespostaFalsa()
+
+    provedor._gerar = _gerar
+    return provedor, chamados
+
+
+def test_gemini_sobrecarregado_usa_o_modelo_reserva():
+    provedor, chamados = _gemini_com([_ErroApi(503, "UNAVAILABLE. high demand"), "ok"])
+    resposta = asyncio.run(provedor.generate("prompt"))
+    assert chamados == ["principal", "reserva"]
+    assert resposta["texto_detetive"] == "Onde o senhor estava?"
+
+
+def test_gemini_lento_tem_limite_de_tempo_e_usa_a_reserva():
+    """Visto em jogo: uma chamada ficou 97s pendurada e o Unity deu timeout."""
+    provedor, chamados = _gemini_com(["lento", "ok"])
+    resposta = asyncio.run(provedor.generate("prompt"))
+    assert chamados == ["principal", "reserva"]
+    assert resposta["status_investigacao"]["nivel_suspeita"] == 30
+
+
+def test_gemini_todo_sobrecarregado_avisa_o_jogador():
+    erro = _ErroApi(503, "UNAVAILABLE. high demand")
+    provedor, chamados = _gemini_com([erro, erro])
+    try:
+        asyncio.run(provedor.generate("prompt"))
+    except LLMUnavailableError as exc:
+        assert "sobrecarregados" in str(exc)
+        assert "Qwen" in str(exc)
+    else:
+        raise AssertionError("sobrecarga nos dois modelos deveria ser LLMUnavailableError")
+    assert chamados == ["principal", "reserva"]
+
+
+def test_chave_invalida_nao_tenta_a_reserva():
+    provedor, chamados = _gemini_com([_ErroApi(400, "API key not valid"), "ok"])
+    try:
+        asyncio.run(provedor.generate("prompt"))
+    except LLMUnavailableError as exc:
+        assert "chave" in str(exc).lower()
+    else:
+        raise AssertionError("chave invalida deveria ser LLMUnavailableError")
+    assert chamados == ["principal"]
+
+
+def test_modelo_aposentado_404_passa_para_a_reserva():
+    """O Google respondeu 404 "no longer available to new users" para o 2.5-flash-lite."""
+    provedor, chamados = _gemini_com([_ErroApi(404, "NOT_FOUND. no longer available to new users"), "ok"])
+    resposta = asyncio.run(provedor.generate("prompt"))
+    assert chamados == ["principal", "reserva"]
+    assert resposta["texto_detetive"] == "Onde o senhor estava?"
+
+
+COTA_DIARIA = ("429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+               "generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\n"
+               "Please retry in 6h35m3.991822121s.")
+
+
+def test_cota_esgotada_usa_a_reserva_que_tem_cota_propria():
+    """Plano gratis: 20 perguntas/dia POR MODELO. Visto em jogo na 20a pergunta."""
+    provedor, chamados = _gemini_com([_ErroApi(429, COTA_DIARIA), "ok"])
+    resposta = asyncio.run(provedor.generate("prompt"))
+    assert chamados == ["principal", "reserva"]
+    assert resposta["texto_detetive"] == "Onde o senhor estava?"
+
+
+def test_cota_esgotada_nos_dois_diz_quando_volta():
+    provedor, _ = _gemini_com([_ErroApi(429, COTA_DIARIA), _ErroApi(429, "Please retry in 41.2s.")])
+    try:
+        asyncio.run(provedor.generate("prompt"))
+    except LLMUnavailableError as exc:
+        # o tempo do 1o modelo (o principal), e nao "alguns minutos"
+        assert "6h35" in str(exc)
+        assert "Qwen" in str(exc)
+    else:
+        raise AssertionError("cota esgotada nos dois deveria ser LLMUnavailableError")
+
+
+def test_mensagem_de_cota_por_minuto():
+    msg = GeminiProvider._mensagem_de_cota(_ErroApi(429, "Please retry in 41.2s."))
+    assert "41 segundos" in msg

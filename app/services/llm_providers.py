@@ -10,8 +10,10 @@ O prompt e montado num lugar so — o PromptOrchestrator — e chega aqui pronto
 Provedor cuida de transporte, nunca de conteudo: se cada um montasse o proprio
 prompt, Gemini e Ollama passariam a divergir sem ninguem perceber.
 """
+import asyncio
 import logging
 import os
+import re
 import sys
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -32,6 +34,16 @@ if not getattr(sys, "frozen", False):
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL_PADRAO = "models/gemini-2.5-flash"
+# Reserva quando o principal esta sobrecarregado, lento ou indisponivel. Um
+# alias que o Google mantem apontando para o Flash atual: nunca e aposentado.
+# (O 2.5-flash-lite, primeira escolha, ja respondia 404 "no longer available
+# to new users" — e o 2.5-flash tende a seguir o mesmo caminho para contas
+# novas; o alias cobre esse jogador.)
+GEMINI_MODELO_RESERVA_PADRAO = "models/gemini-flash-latest"
+# Por tentativa. Duas tentativas (principal + reserva) somam ~60s, dentro dos
+# 90s em que o ApiClient do Unity desiste. Sem limite, uma chamada ficou 97s
+# pendurada no Google antes de devolver 503 — e o jogador so viu o timeout.
+GEMINI_TIMEOUT_PADRAO = 30.0
 OLLAMA_URL_PADRAO = "http://localhost:11434"
 OLLAMA_MODELO_PADRAO = "detetive-guilty"
 # Teto de 30s do lado do Unity (ApiClient.timeoutSeconds): passar muito disso
@@ -200,12 +212,29 @@ class GeminiProvider(LLMProvider):
 
     nome = "gemini"
 
-    def __init__(self, api_key: str, model: Optional[str] = None):
+    def __init__(self, api_key: str, model: Optional[str] = None,
+                 modelo_reserva: Optional[str] = None,
+                 timeout: Optional[float] = None):
         import google.genai as genai
 
         self.api_key = api_key
         self.model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL_PADRAO)
+        self.modelo_reserva = modelo_reserva or os.getenv("GEMINI_MODELO_RESERVA", GEMINI_MODELO_RESERVA_PADRAO)
+        self.timeout = timeout or float(os.getenv("GEMINI_TIMEOUT", GEMINI_TIMEOUT_PADRAO))
         self.client = genai.Client(api_key=api_key)
+
+    @staticmethod
+    def _sobrecarga(exc: BaseException) -> bool:
+        """
+        Instabilidade do lado do Google (503 "high demand", 500, 504...). E
+        passageira: tentar de novo — de preferencia em outro modelo — costuma
+        funcionar. Visto em jogo: 503 apos 19s, e a nova tentativa respondeu.
+        """
+        codigo = getattr(exc, "code", None)
+        if codigo in (500, 502, 503, 504):
+            return True
+        texto = str(exc).lower()
+        return any(m in texto for m in ("unavailable", "overloaded", "high demand"))
 
     @staticmethod
     def _erro_de_conta(exc: BaseException) -> Optional[str]:
@@ -220,15 +249,40 @@ class GeminiProvider(LLMProvider):
         if codigo in (401, 403) or (codigo == 400 and "api key" in texto):
             return ("A chave do Gemini foi recusada. Confira a chave em "
                     "Configurações > Detetive (IA).")
-        if codigo == 429:
-            return ("A cota gratuita do Gemini acabou por agora. Espere alguns "
-                    "minutos ou troque para a IA local nas Configurações.")
         return None
 
+    @staticmethod
+    def _mensagem_de_cota(exc: BaseException) -> str:
+        """
+        Cota esgotada (429), com o tempo de espera que o proprio Google informa
+        ("Please retry in 6h35m3.99s"). No plano gratis o 2.5-flash libera so
+        20 perguntas por DIA — "espere alguns minutos" mandava o jogador
+        esperar a toa.
+        """
+        espera = re.search(r"retry in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s", str(exc))
+        if espera:
+            horas, minutos = int(espera.group(1) or 0), int(espera.group(2) or 0)
+            if horas:
+                quando = f"em cerca de {horas}h{minutos:02d}"
+            elif minutos:
+                quando = f"em cerca de {minutos} min"
+            else:
+                quando = f"em {max(1, round(float(espera.group(3))))} segundos"
+        else:
+            quando = "mais tarde"
+        return (f"A cota gratuita do Gemini acabou e volta {quando}. Enquanto isso, "
+                f"use o Qwen local em Configurações > Detetive (IA).")
+
     async def verificar_chave(self) -> None:
-        """Consulta barata (metadados do modelo), sem gastar cota de geração."""
+        """
+        Consulta barata (metadados do modelo), sem gastar cota de geração.
+
+        Pelo modelo reserva (alias que sempre existe): consultar o principal
+        faria uma chave boa de conta nova parecer recusada só porque o 2.5
+        foi fechado para contas novas.
+        """
         try:
-            await self.client.aio.models.get(model=self.model)
+            await self.client.aio.models.get(model=self.modelo_reserva)
         except Exception as exc:
             if _e_erro_de_conexao(exc):
                 raise LLMUnavailableError("Sem conexão com a API do Gemini.") from exc
@@ -236,33 +290,80 @@ class GeminiProvider(LLMProvider):
                 self._erro_de_conta(exc) or f"O Gemini recusou a chave: {exc}"
             ) from exc
 
+    async def _gerar(self, modelo: str, prompt: str):
+        return await self.client.aio.models.generate_content(model=modelo, contents=prompt)
+
     async def generate(self, prompt: str) -> Dict[str, Any]:
-        try:
-            resposta = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt,
+        # Principal e, se ele estiver sobrecarregado ou lento, a reserva.
+        modelos = [self.model] + ([self.modelo_reserva] if self.modelo_reserva != self.model else [])
+        sobrecarregado = False
+        cota_esgotada: Optional[BaseException] = None
+
+        for modelo in modelos:
+            try:
+                resposta = await asyncio.wait_for(self._gerar(modelo, prompt), self.timeout)
+            except asyncio.TimeoutError:
+                logger.warning(f"Gemini ({modelo}) passou de {self.timeout:.0f}s; tentando a reserva.")
+                sobrecarregado = True
+                continue
+            except Exception as exc:
+                erro_de_conta = self._erro_de_conta(exc)
+                if erro_de_conta:
+                    logger.error(f"Gemini recusou a conta: {exc}")
+                    raise LLMUnavailableError(erro_de_conta) from exc
+
+                if getattr(exc, "code", None) == 429:
+                    # A cota do plano gratis e POR MODELO: a reserva tem a dela.
+                    logger.warning(f"Gemini ({modelo}) sem cota: {exc}")
+                    cota_esgotada = cota_esgotada or exc
+                    continue
+
+                # Antes da checagem de conexao: o texto do 503 do Google nao
+                # e de rede, e "Nao foi possivel alcancar" mandaria o jogador
+                # conferir a internet a toa.
+                if self._sobrecarga(exc):
+                    logger.warning(f"Gemini ({modelo}) sobrecarregado: {exc}")
+                    sobrecarregado = True
+                    continue
+
+                if getattr(exc, "code", None) == 404:
+                    # Modelo aposentado ou fechado para contas novas.
+                    logger.warning(f"Gemini ({modelo}) indisponivel para esta chave: {exc}")
+                    continue
+
+                if _e_erro_de_conexao(exc):
+                    logger.error(f"Gemini inacessivel: {exc}")
+                    raise LLMUnavailableError(
+                        "Sem conexão com o Gemini. Confira sua internet."
+                    ) from exc
+
+                logger.error(f"Gemini respondeu com erro: {exc}")
+                raise LLMGenerationError(str(exc)) from exc
+
+            texto = getattr(resposta, "text", None)
+            if not texto:
+                raise LLMGenerationError("Gemini devolveu resposta vazia.")
+
+            if modelo != self.model:
+                logger.info(f"Respondido pelo modelo reserva ({modelo}).")
+            logger.info(f"Resposta bruta (gemini): {texto}")
+            return parse_llm_json(texto)
+
+        # LLMUnavailableError e nao LLMGenerationError: o orquestrador nao
+        # pode somar mais tentativas de 30s em cima disto (o Unity desiste
+        # em 90s) — o jogador recebe a mensagem e decide.
+        if cota_esgotada is not None and not sobrecarregado:
+            raise LLMUnavailableError(self._mensagem_de_cota(cota_esgotada))
+        if sobrecarregado:
+            raise LLMUnavailableError(
+                "Os servidores do Gemini estão sobrecarregados agora (instabilidade "
+                "do Google). Tente de novo em instantes ou troque para o Qwen local "
+                "em Configurações > Detetive (IA)."
             )
-        except Exception as exc:
-            if _e_erro_de_conexao(exc):
-                logger.error(f"Gemini inacessivel: {exc}")
-                raise LLMUnavailableError(
-                    "Nao foi possivel alcancar a API do Gemini."
-                ) from exc
-
-            erro_de_conta = self._erro_de_conta(exc)
-            if erro_de_conta:
-                logger.error(f"Gemini recusou a conta: {exc}")
-                raise LLMUnavailableError(erro_de_conta) from exc
-
-            logger.error(f"Gemini respondeu com erro: {exc}")
-            raise LLMGenerationError(str(exc)) from exc
-
-        texto = getattr(resposta, "text", None)
-        if not texto:
-            raise LLMGenerationError("Gemini devolveu resposta vazia.")
-
-        logger.info(f"Resposta bruta (gemini): {texto}")
-        return parse_llm_json(texto)
+        raise LLMUnavailableError(
+            "Nenhum modelo do Gemini está disponível para esta chave. Use o Qwen "
+            "local em Configurações > Detetive (IA)."
+        )
 
 
 class OllamaProvider(LLMProvider):
