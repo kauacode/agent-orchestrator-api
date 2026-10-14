@@ -17,12 +17,7 @@ def test_contradiction_persistence():
     # Limpa o estado do turno anterior: com o arquivo de versão sobrando de uma
     # execução passada, a asserção do turno 1 falha na segunda rodada.
     mem = ContextMemoryManager(storage_dir="data")
-    for caminho in (mem._session_version_path(session), mem._session_md_path(session)):
-        try:
-            if caminho.exists():
-                caminho.unlink()
-        except Exception:
-            pass
+    mem.finalizar_sessao(session)   # historico, versao e estado da partida
 
     req = InterrogateRequest(session_id=session, player_text="Eu não estava lá.")
     result = asyncio.run(interrogate(req, provider=MockProvider()))

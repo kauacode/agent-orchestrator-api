@@ -12,7 +12,9 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.schemas import InterrogateRequest, ResponseContract, TesteChaveRequest
+from app.schemas import (
+    InterrogateRequest, JanelaResposta, RespostaJogo, TesteChaveRequest,
+)
 from app.services.case_repository import list_cases
 from app.services.context_memory import ContextMemoryManager
 from app.services.llm_providers import (
@@ -22,6 +24,7 @@ from app.services.llm_providers import (
 )
 from app.services.model_catalog import obter_modelo
 from app.services.model_downloader import GerenciadorDownloads
+from app.services.partida_service import JanelaInvalida
 from app.services.prompt_orchestrator import PromptOrchestrator
 from app.services.provider_registry import ProviderRegistry
 
@@ -115,9 +118,12 @@ def _sem_provedor_fixo() -> Optional[LLMProvider]:
     return None
 
 
-@app.post("/interrogate", response_model=ResponseContract)
+@app.post("/interrogate", response_model=RespostaJogo)
 async def interrogate(req: InterrogateRequest,
                       provider: Optional[LLMProvider] = Depends(_sem_provedor_fixo)):
+    # Instante de CHEGADA: o tempo de resposta do jogador termina aqui, antes
+    # da fila do lock e da IA.
+    chegada = time.time()
     sessao = req.session_id
     agora = time.time()
 
@@ -133,31 +139,59 @@ async def interrogate(req: InterrogateRequest,
     rate_limit[sessao] = historico
 
     if provider is None:
-        # Resolve ANTES de gravar a fala: com a IA indisponivel (modelo nao
-        # baixado, sem chave), a fala do jogador nao pode ficar orfa no
-        # historico e reaparecer duplicada quando ele tentar de novo.
+        # Resolve ANTES de tocar na partida: com a IA indisponivel (modelo nao
+        # baixado, sem chave), nada pode ser gravado.
         try:
             provider = await provedores.resolver(req.provider, req.gemini_api_key)
         except LLMUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     logger.info(f"Mensagem recebida na sessao {sessao}")
-    memoria.append_turn(sessao, req.player_text, role="suspeito")
-
     logger.info(f"Provedor: {provider.nome}")
 
     try:
+        # O historico (fala do jogador + fala do detetive) so e gravado dentro
+        # do orquestrador, depois de o turno terminar bem: falha de IA nao deixa
+        # fala orfa que reaparece duplicada no reenvio.
         res = await orchestrator.analyze(sessao, req.player_text,
-                                         provider=provider, case_id=req.case_id)
+                                         provider=provider, case_id=req.case_id,
+                                         interacao_id=req.interacao_id, chegada=chegada)
     except LLMUnavailableError as exc:
         # 503 e nao 500: o problema nao e a nossa API, e o modelo que nao esta
         # no ar. O ApiClient do Unity ja trata nao-2xx e mostra a mensagem.
         logger.error(f"Provedor {provider.nome} indisponivel: {exc}")
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    memoria.append_turn(sessao, res.get("texto_detetive", ""), role="detetive")
-
     return res
+
+
+# ─── Timer de resposta (60 s) ─────────────────────────────────────────────────
+
+@app.post("/session/{session_id}/interacao", response_model=JanelaResposta)
+async def abrir_interacao(session_id: str, case_id: Optional[str] = None):
+    """
+    O jogador acionou 'RESPONDER': abre a janela de 60 s (relogio do servidor).
+    Idempotente enquanto a janela estiver aberta.
+    """
+    try:
+        return await orchestrator.abrir_janela(session_id, case_id)
+    except JanelaInvalida as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/session/{session_id}/interacao/{interacao_id}/expirar")
+async def expirar_interacao(session_id: str, interacao_id: str):
+    """
+    O cliente diz que os 60 s acabaram. O servidor confere o proprio relogio:
+    pedido antecipado e recusado (409); pedido repetido ou concorrente com a
+    resposta e inofensivo (`aplicado: false`).
+    """
+    try:
+        resultado = await orchestrator.expirar_janela(session_id, interacao_id)
+    except JanelaInvalida as exc:
+        codigo = 404 if "desconhecida" in str(exc) else 409
+        raise HTTPException(status_code=codigo, detail=str(exc)) from exc
+    return resultado
 
 @app.get("/cases")
 def listar_casos():
@@ -178,7 +212,7 @@ def finalizar_sessao(session_id: str):
     partida). Apaga o historico e o estado em memoria da sessao.
     """
     removeu = memoria.finalizar_sessao(session_id)
-    orchestrator.turn_counter.pop(session_id, None)
+    orchestrator.esquecer_sessao(session_id)
     rate_limit.pop(session_id, None)
     if removeu:
         logger.info(f"Sessao {session_id} finalizada")

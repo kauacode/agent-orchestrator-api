@@ -159,7 +159,8 @@ class ContextMemoryManager:
         """
         md = self._session_md_path(session_id)
         removeu = False
-        for caminho in (md, self._session_version_path(session_id), md.with_suffix('.lock')):
+        estado = self.storage_dir / f"{session_id}_estado.json"
+        for caminho in (md, self._session_version_path(session_id), estado, md.with_suffix('.lock')):
             try:
                 if caminho.exists():
                     caminho.unlink()

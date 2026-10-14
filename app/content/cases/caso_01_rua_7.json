@@ -2,65 +2,142 @@
   "case_id": "CASO 01",
   "titulo": "O Homicídio da Rua 7",
   "resumo_publico": "Um homem é encontrado morto no depósito dos fundos de uma gráfica na Rua 7. O último funcionário a deixar o prédio é levado para interrogatório.",
-
+  "abertura": {
+    "_comentario": "Fala de abertura mostrada pelo jogo antes da 1a resposta (UIController.openingLine). O estado parte dela: sem isso o detetive nao sabe que ja perguntou o paradeiro.",
+    "tema": "paradeiro_janela",
+    "pergunta": "Onde você estava na noite do dia 14 de março?"
+  },
+  "contexto_geral": "Na noite de 14 de março, a Gráfica Bandeirantes, na Rua 7, funcionava em turno estendido por causa de uma encomenda atrasada. O prédio tem recepção com câmera, salão de máquinas, escritório, o depósito dos fundos e uma porta lateral que dá para um beco. Na manhã seguinte, às 06:10, a equipe da manhã encontrou o sócio-proprietário morto no depósito dos fundos. O sistema de crachás mostra que Daniel Reis foi o último funcionário a sair, às 20:48, e que ele havia discutido com a vítima horas antes.",
+  "local_e_periodo": {
+    "local": "Gráfica Bandeirantes, Rua 7 — depósito dos fundos",
+    "periodo_do_crime": "noite de 14 de março, entre 20:00 e 20:30 (laudo)",
+    "descoberta": "06:10 do dia seguinte"
+  },
   "papel_do_jogador": {
     "nome": "Daniel Reis",
     "funcao": "Operador de impressão na Gráfica Bandeirantes",
     "situacao": "Suspeito principal. Foi o último a sair do prédio e tinha desavença registrada com a vítima.",
     "instrucao_ao_detetive": "O interlocutor É o suspeito, não uma testemunha. Trate-o como tal: nada de 'cidadão' ou 'testemunha'. Chame-o de Daniel ou 'senhor Reis'."
   },
-
   "vitima": {
     "nome": "Otávio Lisboa",
     "idade": 47,
-    "funcao": "Sócio-proprietário da Gráfica Bandeirantes"
+    "funcao": "Sócio-proprietário da Gráfica Bandeirantes",
+    "historico": "Fundou a gráfica há 18 anos com o sócio Marcelo Aguiar. Tinha fama de duro com os funcionários e vinha desconfiando de saídas estranhas de dinheiro do caixa nas últimas semanas.",
+    "como_foi_morto": "Golpes na cabeça com um objeto contundente. O instrumento não foi encontrado."
   },
-
+  "relacoes": [
+    {
+      "entre": "Daniel Reis e Otávio Lisboa",
+      "natureza": "Funcionário e patrão. Tensão por horas extras não pagas; discussão registrada às 19:52."
+    },
+    {
+      "entre": "Otávio Lisboa e Marcelo Aguiar",
+      "natureza": "Sócios. A relação estava deteriorada por suspeita de desvio de dinheiro (só o detetive-IA conhece o motivo real)."
+    },
+    {
+      "entre": "Daniel Reis e Marcelo Aguiar",
+      "natureza": "Pouco contato direto. Marcelo raramente aparecia no turno da noite."
+    }
+  ],
   "_comentario_verdade": "Isto é o que DE FATO aconteceu. Serve para julgar as falas do suspeito. O detetive NUNCA revela nada daqui que não esteja também em evidencias_conhecidas.",
   "verdade": {
     "culpado": "Marcelo Aguiar, o outro sócio",
     "jogador_e_culpado": false,
     "o_que_aconteceu": "Marcelo Aguiar matou Otávio durante uma discussão sobre desvio de dinheiro da gráfica, por volta das 20:15, no depósito dos fundos. Daniel Reis não estava no depósito nesse horário: tinha saído para fumar no beco lateral, sozinho, entre 20:05 e 20:35 — o que o deixa sem álibi verificável exatamente na janela do crime.",
     "linha_do_tempo": [
-      { "hora": "19:40", "fato": "Marcelo chega à gráfica por uma porta lateral. Não passa pela recepção." },
-      { "hora": "19:52", "fato": "Daniel discute com Otávio no salão de máquinas por causa de horas extras não pagas. Dois colegas ouvem." },
-      { "hora": "20:05", "fato": "Daniel sai para o beco lateral para fumar. Fica sozinho lá até 20:35." },
-      { "hora": "20:15", "fato": "Marcelo mata Otávio no depósito dos fundos." },
-      { "hora": "20:26", "fato": "Marcelo deixa o prédio pela mesma porta lateral." },
-      { "hora": "20:35", "fato": "Daniel volta, encontra tudo aparentemente normal e vai embora às 20:48 pela recepção." },
-      { "hora": "06:10", "fato": "O corpo é encontrado pela equipe da manhã." }
-    ]
+      {
+        "hora": "19:40",
+        "fato": "Marcelo chega à gráfica por uma porta lateral. Não passa pela recepção."
+      },
+      {
+        "hora": "19:52",
+        "fato": "Daniel discute com Otávio no salão de máquinas por causa de horas extras não pagas. Dois colegas ouvem."
+      },
+      {
+        "hora": "20:05",
+        "fato": "Daniel sai para o beco lateral para fumar. Fica sozinho lá até 20:35."
+      },
+      {
+        "hora": "20:15",
+        "fato": "Marcelo mata Otávio no depósito dos fundos."
+      },
+      {
+        "hora": "20:26",
+        "fato": "Marcelo deixa o prédio pela mesma porta lateral."
+      },
+      {
+        "hora": "20:35",
+        "fato": "Daniel volta, encontra tudo aparentemente normal e vai embora às 20:48 pela recepção."
+      },
+      {
+        "hora": "06:10",
+        "fato": "O corpo é encontrado pela equipe da manhã."
+      }
+    ],
+    "motivacoes": {
+      "Marcelo Aguiar": "Era o autor do desvio e foi confrontado por Otávio; a morte impedia a denúncia.",
+      "Daniel Reis": "Ressentimento por horas extras — motivo fraco e já à vista de todos, o que o torna suspeito conveniente."
+    },
+    "segredos_que_nao_devem_ser_revelados_antes_da_hora": [
+      "O desvio de dinheiro da gráfica.",
+      "Que Marcelo esteve no prédio naquela noite.",
+      "Que a porta lateral foi o caminho de entrada e saída de Marcelo."
+    ],
+    "contradicoes_que_o_suspeito_pode_gerar": [
+      "Dizer que esteve acompanhado de colegas depois das 20:05 (o beco era um local sem testemunhas).",
+      "Negar a discussão das 19:50 (dois colegas a confirmam).",
+      "Dizer que saiu pela porta lateral e voltou: o crachá só registra a saída às 20:48."
+    ],
+    "condicoes_para_resolver": "O suspeito é inocente. O caso se resolve a favor dele quando consegue sustentar, sem se contradizer, que estava no beco lateral entre 20:05 e 20:35, apontando a porta lateral e a presença de outra pessoa no prédio como lacuna na investigação."
   },
-
+  "conhecimento_do_suspeito": {
+    "_comentario": "O que Daniel Reis (o jogador) sabe/viveu. O detetive-IA NÃO deve presumir nada daqui além do que ele declarar.",
+    "sabe": [
+      "Que discutiu com Otávio às 19:52.",
+      "Que foi fumar no beco lateral às 20:05 e voltou às 20:35.",
+      "Que saiu pela recepção às 20:48."
+    ],
+    "nao_sabe": [
+      "Quem matou Otávio.",
+      "Que Marcelo esteve no prédio.",
+      "Onde está o pé-de-cabra."
+    ],
+    "pode_ter_notado": "Algum movimento na porta lateral enquanto estava no beco — só se o jogador decidir inventar/contar."
+  },
   "_comentario_evidencias": "Isto é o que o detetive TEM EM MÃOS. É a única coisa que ele pode citar, mostrar ou usar para pressionar.",
   "evidencias_conhecidas": [
     {
       "id": "laudo_horario",
       "descricao": "O laudo cadavérico fixa a morte entre 20:00 e 20:30.",
-      "fonte": "Perícia"
+      "fonte": "Perícia",
+      "a_partir_do_turno": 1
     },
     {
       "id": "cracha_saida",
       "descricao": "O crachá de Daniel Reis registra saída pela recepção às 20:48. Não há registro de saída anterior.",
-      "fonte": "Controle de acesso"
+      "fonte": "Controle de acesso",
+      "a_partir_do_turno": 1
     },
     {
       "id": "discussao_ouvida",
       "descricao": "Dois colegas relatam ter ouvido Daniel discutir com a vítima por volta das 19:50, sobre horas extras não pagas.",
-      "fonte": "Depoimento de terceiros"
+      "fonte": "Depoimento de terceiros",
+      "a_partir_do_turno": 2
     },
     {
       "id": "camera_recepcao",
       "descricao": "A câmera da recepção cobre apenas a entrada principal. A porta lateral e o beco não são cobertos.",
-      "fonte": "Segurança"
+      "fonte": "Segurança",
+      "a_partir_do_turno": 3
     },
     {
       "id": "objeto_ausente",
       "descricao": "Um pé-de-cabra que ficava no depósito não foi localizado.",
-      "fonte": "Inventário"
+      "fonte": "Inventário",
+      "a_partir_do_turno": 5
     }
   ],
-
   "_comentario_lacunas": "O que o detetive NÃO sabe. É isto que ele tenta arrancar no interrogatório — e o que torna o jogo jogável.",
   "lacunas": [
     "Onde Daniel esteve entre 20:00 e 20:35.",
@@ -68,7 +145,6 @@
     "Quem tinha acesso à porta lateral.",
     "O paradeiro do pé-de-cabra."
   ],
-
   "_comentario_suspeita": "Âncoras para o nivel_suspeita. Sem isto o modelo inventa um número a cada turno e a barra da HUD não significa nada.",
   "regras_de_suspeita": {
     "contradiz_evidencia_direta": "+25 a +40",
@@ -77,5 +153,119 @@
     "detalhe_verificavel_e_coerente": "-10 a -20",
     "explica_uma_lacuna_de_forma_plausivel": "-15 a -25",
     "observacao": "Estar sem álibi NÃO é mentira. Só marque detectou_mentira quando a fala colidir com uma evidência ou com uma fala anterior do próprio suspeito."
-  }
+  },
+  "informacoes_confirmadas": [
+    "Hora da morte entre 20:00 e 20:30 (laudo).",
+    "Saída de Daniel pela recepção às 20:48 (crachá).",
+    "Discussão das 19:50 (dois colegas)."
+  ],
+  "informacoes_desconhecidas": [
+    "Onde Daniel esteve entre 20:00 e 20:35.",
+    "Se alguém mais estava no prédio fora do registro da recepção.",
+    "Quem tinha acesso à porta lateral.",
+    "O paradeiro do pé-de-cabra."
+  ],
+  "temas_de_interrogatorio": [
+    {
+      "id": "paradeiro_janela",
+      "descricao": "Onde Daniel esteve entre 20:00 e 20:35",
+      "gatilhos": [
+        "20h00",
+        "20:00",
+        "20h05",
+        "20:05",
+        "20h35",
+        "20:35",
+        "entre 20",
+        "onde estava",
+        "onde o senhor estava",
+        "onde voce estava",
+        "beco",
+        "fumar",
+        "fumando",
+        "cigarro",
+        "sozinho",
+        "lado de fora",
+        "fora do predio"
+      ],
+      "pergunta_modelo": "Onde exatamente o senhor estava entre 20h00 e 20h35, e alguém pode confirmar?",
+      "prioridade": 10
+    },
+    {
+      "id": "discussao_vitima",
+      "descricao": "A discussão com Otávio por horas extras",
+      "gatilhos": [
+        "discuti",
+        "discussao",
+        "horas extras",
+        "hora extra",
+        "briga",
+        "brigou",
+        "otavio",
+        "salario",
+        "pagamento"
+      ],
+      "pergunta_modelo": "O que o senhor e Otávio discutiram por volta das 19h50, e como terminou?",
+      "prioridade": 20
+    },
+    {
+      "id": "saida_predio",
+      "descricao": "Quando e por onde saiu do prédio",
+      "gatilhos": [
+        "cracha",
+        "20:48",
+        "20h48",
+        "recepcao",
+        "fui embora",
+        "sai do predio",
+        "saida",
+        "sai as"
+      ],
+      "pergunta_modelo": "O crachá registra sua saída às 20h48. Entre o fim da discussão e essa hora, por onde o senhor circulou?",
+      "prioridade": 30
+    },
+    {
+      "id": "outras_pessoas",
+      "descricao": "Se viu mais alguém no prédio",
+      "gatilhos": [
+        "alguem",
+        "outra pessoa",
+        "marcelo",
+        "socio",
+        "vi ninguem",
+        "ninguem",
+        "vulto",
+        "barulho",
+        "carro"
+      ],
+      "pergunta_modelo": "O senhor viu ou ouviu mais alguém no prédio ou perto dele naquela noite?",
+      "prioridade": 40
+    },
+    {
+      "id": "porta_lateral",
+      "descricao": "Acesso pela porta lateral",
+      "gatilhos": [
+        "porta lateral",
+        "lateral",
+        "chave",
+        "entrada dos fundos",
+        "beco"
+      ],
+      "pergunta_modelo": "Quem tem acesso à porta lateral, e ela estava aberta ou trancada quando o senhor saiu para fumar?",
+      "prioridade": 50
+    },
+    {
+      "id": "objeto_deposito",
+      "descricao": "O pé-de-cabra e o depósito",
+      "gatilhos": [
+        "pe de cabra",
+        "pe-de-cabra",
+        "ferramenta",
+        "deposito",
+        "barra de ferro"
+      ],
+      "pergunta_modelo": "Um pé-de-cabra do depósito sumiu. O senhor sabe dizer onde ele estava e quem o usava?",
+      "prioridade": 60
+    }
+  ]
 }

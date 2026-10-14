@@ -44,8 +44,9 @@ def test_partida_nova_nao_herda_nada_da_anterior():
     sessao = "finalizar_heranca"
     main.finalizar_sessao(sessao)
     for _ in range(3):
-        _jogar(sessao)   # mock: suspeita 80 a cada mentira
-    assert main.memoria.get_recent_suspicions(sessao, n=3) == [80, 80, 80]
+        _jogar(sessao)   # mock propoe 80 a cada mentira
+    # O 1o turno sobe no maximo MAX_AUMENTO_POR_TURNO (40) a partir do 0.
+    assert main.memoria.get_recent_suspicions(sessao, n=3) == [40, 80, 80]
 
     main.finalizar_sessao(sessao)
     resposta = _jogar(sessao, "Boa noite.")

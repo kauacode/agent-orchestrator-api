@@ -1,20 +1,64 @@
 import asyncio
+import copy
 import difflib
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from app.schemas import ResponseContract
+from app.services import game_rules as gr
 from app.services.case_repository import get_case
+from app.services.interpretador import (
+    AMBIGUA, CONFISSAO, EVASIVA, INFORMACAO, NEGACAO, Interpretacao, Tema,
+    carregar_temas, classificar,
+)
 from app.services.llm_providers import LLMGenerationError, LLMProvider
+from app.services.frases_detetive import escolher_frase
+from app.services.partida_service import (
+    JanelaInvalida, PartidaService, PartidaStore,
+)
 
 logger = logging.getLogger(__name__)
 
 class PromptOrchestrator:
     def __init__(self, memory):
         self.memory = memory
+        # Espelho do turno de cada sessao (a fonte da verdade e o estado
+        # persistido pelo PartidaService). Fica por compatibilidade.
         self.turn_counter = {}
         self.exemplos = self._get_few_shot_examples()
+        self.partida = PartidaService(PartidaStore(str(memory.storage_dir)))
+        # Um lock por sessao: resposta e timeout da MESMA partida nunca correm
+        # juntos (FIFO — quem chegou primeiro decide).
+        self._locks: Dict[str, asyncio.Lock] = {}
+
+    def _lock(self, session_id: str) -> asyncio.Lock:
+        lock = self._locks.get(session_id)
+        if lock is None:
+            lock = self._locks[session_id] = asyncio.Lock()
+        return lock
+
+    def _semear_abertura(self, estado: gr.EstadoPartida, caso: Optional[Dict[str, Any]]) -> None:
+        """
+        A fala de abertura (cliente) ja e uma pergunta. Registra-a no estado do
+        turno 0: sem isso a 1a resposta do jogador ("em casa") nao era ligada a
+        pergunta nenhuma, o tema ficava em aberto e o detetive o repetia depois.
+        """
+        abertura = (caso or {}).get("abertura")
+        if not abertura or estado.turno != 0 or estado.ultima_pergunta:
+            return
+        estado.ultima_pergunta = abertura.get("pergunta", "")
+        tema = abertura.get("tema")
+        if tema:
+            estado.tema_pergunta_atual = tema
+            estado.temas.setdefault(tema, {"perguntado": 0, "respondido": False, "evasivas": 0,
+                                           "resposta": "", "textos": []})["perguntado"] += 1
+
+    def esquecer_sessao(self, session_id: str) -> None:
+        """Chamado ao finalizar a partida: solta lock, contador e estado."""
+        self._locks.pop(session_id, None)
+        self.turn_counter.pop(session_id, None)
+        self.partida.store.apagar(session_id)
 
     def _get_few_shot_examples(self) -> str:
         """
@@ -62,7 +106,9 @@ Exemplo: uma evidência afirma X.
     def _bloco_identidade(self, caso: Dict[str, Any]) -> str:
         papel = caso.get('papel_do_jogador', {})
         vitima = caso.get('vitima', {})
+        contexto = caso.get('contexto_geral')
         return f"""CASO: {caso.get('titulo', 'Sem título')}
+{('CONTEXTO: ' + contexto) if contexto else ''}
 VÍTIMA: {vitima.get('nome', 'Desconhecida')}, {vitima.get('idade', '?')} anos — {vitima.get('funcao', '')}
 
 QUEM ESTÁ NA SUA FRENTE:
@@ -93,14 +139,22 @@ O que aconteceu: {verdade.get('o_que_aconteceu', 'Desconhecido')}
 Culpado real: {verdade.get('culpado', 'Desconhecido')}
 O suspeito à sua frente é o culpado? {'SIM' if culpado_e_o_jogador else 'NÃO'}
 
+Motivações: {json.dumps(verdade.get('motivacoes', {}), ensure_ascii=False)}
+Segredos (não revele antes da hora): {'; '.join(verdade.get('segredos_que_nao_devem_ser_revelados_antes_da_hora', [])) or '(nenhum)'}
+O que o suspeito de fato viveu (use só para JULGAR; não presuma que ele disse algo que não disse): {'; '.join(caso.get('conhecimento_do_suspeito', {}).get('sabe', [])) or '(não informado)'}
 Linha do tempo real:
 {linha or '  (não informada)'}"""
 
     def _bloco_evidencias(self, caso: Dict[str, Any]) -> str:
-        itens = "\n".join(
-            f"  - [{e.get('fonte', '?')}] {e.get('descricao', '')}"
-            for e in caso.get('evidencias_conhecidas', [])
-        )
+        def _linha(e):
+            # Texto FIXO (não depende do turno atual): mantém o prefixo do
+            # prompt estável para o KV cache. Quem diz o que já pode ser citado
+            # neste turno é o bloco dinâmico ESTADO DA INVESTIGAÇÃO.
+            turno = int(e.get('a_partir_do_turno', 1))
+            quando = f" (só cite a partir do turno {turno})" if turno > 1 else ""
+            return f"  - [{e.get('fonte', '?')}] {e.get('descricao', '')}{quando}"
+
+        itens = "\n".join(_linha(e) for e in caso.get('evidencias_conhecidas', []))
         lacunas = "\n".join(f"  - {l}" for l in caso.get('lacunas', []))
 
         return f"""=== EVIDÊNCIAS EM SUAS MÃOS (pode citar) ===
@@ -141,6 +195,7 @@ Parta do NÍVEL DE SUSPEITA ATUAL (informado junto da fala do jogador) e ajuste:
 4. Pressione as lacunas: peça horário, local e quem pode confirmar
 5. {nao_revelar}
 6. Responda à FALA DO JOGADOR atual com frases novas; não repita falas suas nem cumprimente de novo
+6b. Avalie você mesmo o TOM da fala. Se o suspeito for agressivo, ofensivo, debochado ou provocador, reaja em personagem — irritação contida e autoridade firme, em uma frase curta que mostre que você notou — antes de seguir com a pergunta. Se for cooperativo ou nervoso, ajuste o tom de acordo. Nunca responda como se a fala fosse neutra quando não for
 7. Retorne APENAS um objeto JSON válido, sem blocos de código markdown"""
 
     def _historico_compacto(self, session_id: str, player_text: str) -> str:
@@ -166,18 +221,96 @@ Parta do NÍVEL DE SUSPEITA ATUAL (informado junto da fala do jogador) e ajuste:
                 "Você já interrogou o suspeito nesta sessão (não o cumprimente de novo).\n"
                 f"O que ele já declarou:\n{linhas}")
 
-    def _suspeita_atual(self, session_id: str) -> str:
+    def _suspeita_atual(self, session_id: str,
+                        estado: Optional[gr.EstadoPartida] = None) -> str:
         # Fica DEPOIS do histórico, nunca no bloco de regras: muda a cada turno
         # e, no prefixo, invalidaria o KV cache do runtime local.
+        if estado is not None:
+            if estado.turno == 0:
+                return "NÍVEL DE SUSPEITA ATUAL: 0 (início do interrogatório)"
+            return f"NÍVEL DE SUSPEITA ATUAL: {estado.suspeita}"
         recentes = self.memory.get_recent_suspicions(session_id, n=1)
         if not recentes:
             return "NÍVEL DE SUSPEITA ATUAL: 0 (início do interrogatório)"
         return f"NÍVEL DE SUSPEITA ATUAL: {recentes[-1]}"
 
+    # ─── Blocos DINAMICOS (depois de "FALA DO JOGADOR") ──────────────────────
+    # Mudam a cada turno, entao ficam no fim: o prefixo fixo do prompt continua
+    # identico entre turnos e o KV cache do llama.cpp segue valendo.
+
+    def _bloco_analise(self, interp: Interpretacao, fatos: Dict[str, Any],
+                       temas: List[Tema], estado: gr.EstadoPartida) -> str:
+        por_id = {t.id: t for t in temas}
+        instrucao = {
+            CONFISSAO: ("O suspeito AFIRMOU QUE COMETEU O CRIME (confissão — ainda NÃO comprovada). "
+                        "Isto NÃO é uma negação. Reaja diretamente a ela. NÃO volte a perguntar "
+                        "horário, álibi ou paradeiro como se ele tivesse negado. Peça detalhes que "
+                        "só o autor saberia (como, com o quê, onde a vítima estava, o que fez depois) "
+                        "e confronte-os com as evidências."),
+            NEGACAO: ("O suspeito NEGOU a autoria. Reconheça a negação e responda a ela com a "
+                      "evidência ou a lacuna mais relevante."),
+            EVASIVA: ("O suspeito se esquivou ou disse que não sabe. Isso NÃO é uma resposta e NÃO é "
+                      "mentira. Insista no máximo uma vez, de outro jeito, ou passe ao próximo ponto."),
+            AMBIGUA: ("A fala é vaga, curta ou hipotética. Peça esclarecimento direto; não invente o "
+                      "que ele quis dizer."),
+            INFORMACAO: ("O suspeito trouxe informação. Use-a: compare com as evidências e com o que "
+                         "ele já disse antes de seguir."),
+        }[interp.tipo]
+        linhas = [f"=== ANÁLISE DA ÚLTIMA FALA (feita pelo sistema; confie nela) ===",
+                  f"Tipo: {interp.tipo.upper()}. {instrucao}"]
+        if fatos.get("mudou_versao"):
+            linhas.append("ATENÇÃO: ele MUDOU DE VERSÃO sobre a autoria (antes disse o contrário). "
+                          "É uma contradição com o que ele mesmo declarou; explore-a.")
+        pendente = por_id.get(estado.tema_pergunta_atual) if estado.tema_pergunta_atual else None
+        if pendente is not None:
+            linhas.append(
+                f"Sua pergunta anterior era sobre \"{pendente.descricao}\": "
+                + ("a fala a RESPONDE; não a repita." if fatos.get("respondeu_pendente")
+                   else "a fala NÃO a respondeu."))
+        return "\n".join(linhas)
+
+    def _bloco_estado(self, estado: gr.EstadoPartida, temas: List[Tema],
+                      caso: Optional[Dict[str, Any]]) -> str:
+        por_id = {t.id: t for t in temas}
+        esclarecidos, sem_resposta, abertos = [], [], []
+        for t in temas:
+            info = estado.temas.get(t.id)
+            if info and info["respondido"]:
+                esclarecidos.append(f'  - {t.descricao}: "{info["resposta"]}"')
+            elif info and info["perguntado"] > 0:
+                sem_resposta.append(f"  - {t.descricao}")
+            else:
+                abertos.append(f"  - {t.descricao}")
+        proximo = self.partida.proximo_tema(estado, temas)
+
+        turno = estado.turno + 1
+        liberadas = [e.get('id') for e in (caso or {}).get('evidencias_conhecidas', [])
+                     if int(e.get('a_partir_do_turno', 1)) <= turno]
+        linhas = [
+            "=== ESTADO DA INVESTIGAÇÃO ===",
+            f"Este é o turno {turno} de no máximo {gr.REGRAS.MAX_TURNOS}. Suspeita atual: {estado.suspeita}.",
+            "Já esclarecido (NÃO pergunte de novo, a menos que ele traga algo novo sobre isso):",
+            "\n".join(esclarecidos) or "  (nada ainda)",
+            "Perguntado e ainda sem resposta (pode insistir, de outro jeito):",
+            "\n".join(sem_resposta) or "  (nada)",
+            "Ainda não abordado:",
+            "\n".join(abertos) or "  (nada)",
+        ]
+        if proximo is not None:
+            linhas.append(f"Foco sugerido para esta resposta: {proximo.descricao}.")
+        if liberadas:
+            linhas.append("Evidências que você já pode citar neste turno: " + ", ".join(liberadas) + ".")
+        return "\n".join(linhas)
+
     def build_prompt(self, session_id: str, player_text: str,
                      caso: Optional[Dict[str, Any]] = None,
                      incluir_verdade: bool = True,
-                     compacto: bool = False) -> str:
+                     compacto: bool = False,
+                     estado: Optional[gr.EstadoPartida] = None,
+                     interp: Optional[Interpretacao] = None,
+                     fatos: Optional[Dict[str, Any]] = None,
+                     diretiva: str = "",
+                     tempo_resposta_s: Optional[float] = None) -> str:
         """
         `incluir_verdade=False` omite a seção confidencial do caso.
 
@@ -260,9 +393,39 @@ Responda com JSON puro (sem ```json):
 
 {contexto}
 
-{self._suspeita_atual(session_id)}
+{self._suspeita_atual(session_id, estado)}
 FALA DO JOGADOR: "{player_text}"
-"""
+{self._sufixo_dinamico(estado, interp, fatos, caso, diretiva, tempo_resposta_s)}"""
+
+    def _bloco_tempo(self, tempo_resposta_s: Optional[float]) -> str:
+        """
+        Contexto temporal da resposta atual, classificado pelo BACKEND
+        (game_rules.classificar_tempo) — o modelo nunca calcula nem recebe do
+        cliente. E um sinal contextual fraco; o efeito numerico e do sistema.
+        """
+        nivel = gr.classificar_tempo(tempo_resposta_s)
+        if nivel is None:
+            return ""
+        r = gr.REGRAS
+        return f"""=== TEMPO DE RESPOSTA (medido pelo sistema) ===
+tempo_resposta_segundos: {tempo_resposta_s:.1f}
+nivel_tempo_resposta: {nivel}  (baixo: menos de {r.TEMPO_MEDIO_A_PARTIR_S:.0f}s; médio: de {r.TEMPO_MEDIO_A_PARTIR_S:.0f}s a menos de {r.TEMPO_ALTO_A_PARTIR_S:.0f}s; alto: de {r.TEMPO_ALTO_A_PARTIR_S:.0f}s a {r.PRAZO_RESPOSTA_S:.0f}s)
+status_tempo_resposta: dentro_do_prazo
+O nível de tempo de resposta representa exclusivamente quanto tempo o jogador levou para responder à pergunta atual. Ele não representa, por si só, culpa, mentira, confissão, nervosismo ou contradição. O conteúdo da resposta, sua coerência com as evidências, as contradições e as informações verificáveis continuam sendo os principais fatores para avaliar a suspeita. Use a demora apenas como um sinal contextual secundário e fraco. Não aumente a suspeita automaticamente apenas porque o tempo de resposta foi médio ou alto, nem trate a demora como evidência factual de culpa. O sistema já aplica sozinho um pequeno ajuste pelo tempo: NÃO o inclua no nível_suspeita que você propõe. Se o nível for alto, você pode apenas deixar o tom um pouco mais pressionador, sem inventar fatos."""
+
+    def _sufixo_dinamico(self, estado, interp, fatos, caso, diretiva: str,
+                         tempo_resposta_s: Optional[float] = None) -> str:
+        if estado is None or interp is None:
+            return ""
+        temas = carregar_temas(caso)
+        partes = [self._bloco_analise(interp, fatos or {}, temas, estado),
+                  self._bloco_estado(estado, temas, caso)]
+        bloco_tempo = self._bloco_tempo(tempo_resposta_s)
+        if bloco_tempo:
+            partes.append(bloco_tempo)
+        if diretiva:
+            partes.append(f"CORREÇÃO OBRIGATÓRIA: {diretiva}")
+        return "\n" + "\n\n".join(partes) + "\n"
 
     def _build_prompt_sem_caso(self, contexto: str, player_text: str,
                                exemplos: str) -> str:
@@ -331,7 +494,9 @@ Responda com JSON puro (sem ```json):
 
     async def analyze(self, session_id: str, player_text: str,
                       provider: LLMProvider,
-                      case_id: Optional[str] = None) -> Dict[str, Any]:
+                      case_id: Optional[str] = None,
+                      interacao_id: Optional[str] = None,
+                      chegada: Optional[float] = None) -> Dict[str, Any]:
         """
         Roda um turno de interrogatorio.
 
@@ -342,26 +507,126 @@ Responda com JSON puro (sem ```json):
         LLMUnavailableError NAO e capturado aqui de proposito: servico fora do ar
         e problema de infraestrutura, e a rota traduz isso em HTTP 503. Engolir
         aqui devolveria um mock silencioso e o jogador nunca saberia que o
-        modelo esta desligado.
+        modelo esta desligado. Quando isso acontece NADA da partida muda (o
+        estado so e gravado no fim) e a janela de resposta e reaberta inteira:
+        a falha de infraestrutura nao pode custar tempo ao jogador.
+
+        `chegada` e o instante em que a requisicao entrou na API — medido ANTES
+        da fila do lock e da IA, para que o tempo de processamento nao seja
+        confundido com o tempo que o jogador levou para responder.
         """
-        if session_id not in self.turn_counter:
-            self.turn_counter[session_id] = 0
+        chegada = self.partida.agora() if chegada is None else chegada
+        async with self._lock(session_id):
+            return await self._analisar(session_id, player_text, provider,
+                                        case_id, interacao_id, chegada)
 
-        self.turn_counter[session_id] += 1
+    async def _analisar(self, session_id: str, player_text: str,
+                        provider: LLMProvider, case_id: Optional[str],
+                        interacao_id: Optional[str], chegada: float) -> Dict[str, Any]:
+        store = self.partida.store
+        estado = store.carregar(session_id, case_id)
 
-        caso = get_case(case_id)
+        # Reenvio da mesma interacao: devolve o que ja foi entregue, sem efeito.
+        if interacao_id and interacao_id in estado.processadas:
+            logger.info(f"Interacao {interacao_id} ja processada; devolvendo a mesma resposta.")
+            return copy.deepcopy(estado.processadas[interacao_id])
+
+        # Partida encerrada: nada muda (nem historico, nem contadores).
+        if estado.encerrada:
+            return self._resposta_de_partida_encerrada(estado)
+
+        caso = get_case(case_id or estado.case_id)
+        temas = carregar_temas(caso)
+        if estado.case_id is None and caso:
+            estado.case_id = caso.get("case_id")
+        self._semear_abertura(estado, caso)
+
+        # Resposta que chegou depois do prazo: vale o timeout, nao o texto.
+        if self.partida.janela_vencida(estado, interacao_id, chegada):
+            logger.info(f"Resposta tardia na interacao {interacao_id}; aplicando timeout.")
+            return self._aplicar_timeout(estado, caso, temas)
+
+        tempo = self.partida.tempo_de_resposta(estado, interacao_id, chegada)
+        janela_original = copy.deepcopy(estado.janela)
+        confessou_antes = estado.confessou
+
+        # Trabalha numa COPIA: so vira estado oficial se o turno terminar bem.
+        trabalho = copy.deepcopy(estado)
+        interp = classificar(player_text, temas, pergunta_pendente=True)
+        fatos = self.partida.registrar_fala_do_jogador(trabalho, interp, player_text)
+        if trabalho.janela and trabalho.janela["id"] == interacao_id:
+            trabalho.janela["estado"] = "respondida"
+
+        try:
+            resultado = await self._gerar_fala(session_id, player_text, provider,
+                                               caso, temas, trabalho, interp, fatos, tempo)
+        except Exception:
+            # Falha de infraestrutura: reabre a janela com o prazo inteiro.
+            if janela_original and janela_original["id"] == interacao_id:
+                agora = self.partida.agora()
+                janela_original["aberta_em"] = agora
+                janela_original["prazo_em"] = agora + gr.REGRAS.PRAZO_RESPOSTA_S
+                estado.janela = janela_original
+                try:
+                    store.salvar(estado)
+                except OSError as exc:
+                    logger.error(f"Nao foi possivel reabrir a janela: {exc}")
+            raise
+
+        penalidade = gr.penalidade_por_tempo(tempo) if tempo is not None else 0
+        piso = 0
+        if interp.tipo == CONFISSAO:
+            piso = (gr.REGRAS.PISO_CONFISSAO_REPETIDA if confessou_antes
+                    else gr.REGRAS.PISO_PRIMEIRA_CONFISSAO)
+
+        status = resultado.setdefault("status_investigacao", {})
+        if fatos["mudou_versao"]:
+            # Contradicao com a propria fala anterior: fato do sistema, nao
+            # opiniao do modelo.
+            status["detectou_mentira"] = True
+
+        resposta = self.partida.montar_resposta(
+            trabalho, resultado, penalidade_tempo=penalidade,
+            tempo_resposta_s=tempo, interpretacao=interp, piso_suspeita=piso,
+        )
+        resposta["interacao_id"] = interacao_id or ""
+        self.partida.registrar_pergunta_do_detetive(trabalho, resposta["texto_detetive"], temas)
+        self.partida.guardar_entrega(trabalho, interacao_id or "", resposta)
+
+        store.salvar(trabalho)
+        self.turn_counter[session_id] = trabalho.turno
+        self._gravar_historico(session_id, player_text, resposta, trabalho)
+        return resposta
+
+    async def _gerar_fala(self, session_id: str, player_text: str, provider: LLMProvider,
+                          caso: Optional[Dict[str, Any]], temas: List[Tema],
+                          trabalho: gr.EstadoPartida, interp: Interpretacao,
+                          fatos: Dict[str, Any],
+                          tempo: Optional[float] = None) -> Dict[str, Any]:
+        """
+        Pede a fala ao modelo e a valida: contrato, repeticao literal e
+        repeticao de TEMA ja esclarecido. Devolve o dicionario do contrato com
+        a suspeita ainda como o modelo propôs (quem fecha o turno e o PartidaService).
+        """
         # A capability do provedor decide se a verdade do caso entra no prompt.
         # Quem não aguenta a verdade é modelo pequeno, que também ganha o
         # prompt compacto: uma flag só, para não existir combinação incoerente.
-        prompt = self.build_prompt(
-            session_id, player_text, caso,
-            incluir_verdade=provider.suporta_contexto_confidencial,
-            compacto=not provider.suporta_contexto_confidencial,
-        )
+        incluir_verdade = provider.suporta_contexto_confidencial
 
+        def montar(diretiva: str = "") -> str:
+            return self.build_prompt(
+                session_id, player_text, caso,
+                incluir_verdade=incluir_verdade, compacto=not incluir_verdade,
+                estado=trabalho, interp=interp, fatos=fatos, diretiva=diretiva,
+                tempo_resposta_s=tempo,
+            )
+
+        prompt = montar()
         tentativas = 0
         resultado = None
-        repetida = None
+        repetida = None          # fala identica a uma anterior (ainda serve em ultimo caso)
+        tema_repetido = None     # fala valida, mas pergunta de novo um tema esclarecido
+        corrigido_por_tema = False
 
         # tenta gerar e faz retry se o json vier fora do contrato
         while tentativas <= 2:
@@ -374,15 +639,36 @@ Responda com JSON puro (sem ```json):
                 continue
 
             try:
-                # ajusta o turno antes de validar
-                dados['id_turno'] = self.turn_counter[session_id]
+                # id_turno e provisorio; o definitivo vem do estado da partida
+                dados['id_turno'] = trabalho.turno + 1
                 ResponseContract.model_validate(dados)
             except Exception:
                 tentativas += 1
                 await asyncio.sleep(0.1)
                 continue
 
-            if repetida is None and self._repete_fala_anterior(session_id, dados['texto_detetive']):
+            texto = dados['texto_detetive']
+
+            repetidos = self.partida.temas_repetidos(trabalho, texto, temas, fatos)
+            if repetidos:
+                # Pergunta de novo algo ja esclarecido (ou ja insistido demais).
+                # Uma nova tentativa, com a correcao explicita; se o modelo
+                # insistir, a fala e substituida por uma deterministica.
+                por_id = {t.id: t for t in temas}
+                nomes = ", ".join(por_id[i].descricao for i in repetidos)
+                logger.warning(f"Provedor {provider.nome} repetiu tema ja esclarecido: {nomes}")
+                tema_repetido = dados
+                if not corrigido_por_tema:
+                    corrigido_por_tema = True
+                    proximo = self.partida.proximo_tema(trabalho, temas)
+                    alvo = (f" Em vez disso, avance para: {proximo.descricao}." if proximo
+                            else " Em vez disso, reaja ao que ele disse ou peça um detalhe novo.")
+                    prompt = montar(f"NÃO pergunte de novo sobre: {nomes} (já esclarecido).{alvo}")
+                    tentativas += 1
+                    continue
+                break
+
+            if repetida is None and self._repete_fala_anterior(session_id, texto):
                 # Contrato ok, mas o jogador veria a mesma fala de novo. Uma
                 # nova tentativa só: em CPU cada uma custa ~20s, e o ApiClient
                 # do Unity desiste em 90s. Se repetir de novo, a fala repetida
@@ -395,45 +681,147 @@ Responda com JSON puro (sem ```json):
             resultado = dados
             break
 
+        if resultado is None and tema_repetido is not None:
+            # Mantem a leitura de suspeita do modelo, troca so a fala.
+            resultado = tema_repetido
+            resultado['texto_detetive'] = self._fala_deterministica(caso, temas, trabalho, interp, fatos)
         resultado = resultado or repetida
 
         # se der erro em todas as tentativas, usa a resposta fallback
         if not resultado:
-            return self._fallback_response(session_id, player_text)
+            resultado = self._fallback_response(trabalho, caso, temas, interp, fatos)
 
         self._limitar_faixas(resultado)
-
-        try:
-            nivel = int(resultado.get('status_investigacao', {}).get('nivel_suspeita', 0))
-        except Exception:
-            nivel = 0
-
-        try:
-            self.memory.append_suspicion(session_id, nivel)
-        except Exception:
-            pass
-
-        # trava o input se a suspeita passar de 80
-        congelar = True if nivel > 80 else False
-
-        # game over se a suspeita ficar acima de 90 por 3 turnos seguidos
-        recentes = self.memory.get_recent_suspicions(session_id, n=3)
-        fim = False
-        if len(recentes) >= 3 and all(v >= 90 for v in recentes[-3:]):
-            fim = True
-
-        status = resultado.get('status_investigacao', {})
-        status['congelar_input'] = congelar
-        status['fim_de_jogo'] = fim
-        resultado['status_investigacao'] = status
-
-        try:
-            if status.get('detectou_mentira'):
-                self.memory.append_contradiction(session_id, resultado['id_turno'])
-        except Exception:
-            pass
-
         return resultado
+
+    def _fala_deterministica(self, caso: Optional[Dict[str, Any]], temas: List[Tema],
+                             estado: gr.EstadoPartida, interp: Interpretacao,
+                             fatos: Dict[str, Any]) -> str:
+        """
+        Fala montada sem modelo: reage ao TIPO da declaracao e segue para o
+        proximo ponto em aberto. Garante progresso quando o modelo trava num
+        tema ja esclarecido. So usa fatos do proprio caso.
+        """
+        nome = "senhor"
+        if caso:
+            sobrenome = caso.get("papel_do_jogador", {}).get("nome", "").split()[-1:]
+            if sobrenome:
+                nome = f"senhor {sobrenome[0]}"
+
+        reacao = {
+            CONFISSAO: (f"O {nome} está dizendo que matou Otávio Lisboa? Então me conte como foi: "
+                        "com o quê, onde na gráfica e o que fez logo depois."
+                        if caso else "O senhor está dizendo que cometeu o crime? Então me conte como foi."),
+            NEGACAO: f"Entendo que o {nome} nega. Mas preciso que isso se sustente.",
+            EVASIVA: f"Esquivar-se não ajuda, {nome}.",
+            AMBIGUA: f"Não ficou claro, {nome}. Seja direto.",
+            INFORMACAO: "Anotado.",
+        }[interp.tipo]
+        if interp.tipo == CONFISSAO:
+            return reacao
+
+        proximo = self.partida.proximo_tema(estado, temas)
+        if proximo is not None and proximo.pergunta_modelo:
+            return f"{reacao} {proximo.pergunta_modelo}"
+        return f"{reacao} Há mais alguma coisa que o senhor queira acrescentar ao seu depoimento?"
+
+    # ─── Timer ───────────────────────────────────────────────────────────────
+
+    async def abrir_janela(self, session_id: str, case_id: Optional[str] = None) -> Dict[str, Any]:
+        """O jogador acionou 'responder': comeca a contar os 60 s (relogio do servidor)."""
+        async with self._lock(session_id):
+            estado = self.partida.store.carregar(session_id, case_id)
+            self._semear_abertura(estado, get_case(case_id or estado.case_id))
+            j = estado.janela
+            if (j and j["estado"] == "aberta"
+                    and self.partida.agora() > j["prazo_em"] + gr.REGRAS.TOLERANCIA_RESPOSTA_S):
+                # O cliente sumiu sem avisar o vencimento: o prazo estourou de
+                # verdade, entao o timeout e aplicado agora (uma vez) em vez de
+                # a janela ser descartada de graça.
+                caso = get_case(case_id or estado.case_id)
+                self._aplicar_timeout(estado, caso, carregar_temas(caso))
+            janela = self.partida.abrir_janela(estado)   # JanelaInvalida se encerrada
+            self.partida.store.salvar(estado)
+            return janela
+
+    async def expirar_janela(self, session_id: str, interacao_id: str,
+                             case_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        O prazo acabou sem resposta. Idempotente e imune a corrida com a
+        resposta: se a interacao ja foi resolvida (respondida ou expirada), devolve
+        o que ja foi entregue e `aplicado=False`.
+        """
+        async with self._lock(session_id):
+            estado = self.partida.store.carregar(session_id, case_id)
+
+            if interacao_id in estado.processadas:
+                return {"aplicado": False,
+                        "resposta": copy.deepcopy(estado.processadas[interacao_id])}
+            if estado.encerrada:
+                return {"aplicado": False, "resposta": self._resposta_de_partida_encerrada(estado)}
+
+            self.partida.validar_pedido_de_timeout(estado, interacao_id)  # JanelaInvalida
+
+            if estado.janela["estado"] != "aberta":
+                return {"aplicado": False,
+                        "resposta": self._resposta_de_partida_encerrada(estado)}
+
+            caso = get_case(case_id or estado.case_id)
+            return {"aplicado": True,
+                    "resposta": self._aplicar_timeout(estado, caso, carregar_temas(caso))}
+
+    def _aplicar_timeout(self, estado: gr.EstadoPartida, caso: Optional[Dict[str, Any]],
+                         temas: List[Tema]) -> Dict[str, Any]:
+        """Fecha a janela como expirada, UMA vez, sem chamar o modelo."""
+        self._semear_abertura(estado, caso)
+        indice, frase = escolher_frase(estado.ultima_frase_impaciencia)
+        estado.ultima_frase_impaciencia = indice
+        # A pergunta que ficou sem resposta volta; sem ela, o proximo ponto.
+        # Repete a pergunta que ficou no ar (a ultima do detetive), nao um tema
+        # novo: era o que fazia o timeout "voltar" a uma pergunta antiga.
+        texto = frase
+        if estado.ultima_pergunta:
+            texto = f"{frase} {estado.ultima_pergunta}"
+        else:
+            alvo = self.partida.proximo_tema(estado, temas)
+            if alvo is not None and alvo.pergunta_modelo:
+                texto = f"{frase} {alvo.pergunta_modelo}"
+        resposta = self.partida.resposta_de_timeout(estado, texto, frase)
+        self.partida.registrar_pergunta_do_detetive(estado, texto, temas)
+        self.partida.store.salvar(estado)
+        self.turn_counter[estado.session_id] = estado.turno
+        try:
+            self.memory.append_turn(estado.session_id, "O jogador não respondeu dentro do prazo.", role="sistema")
+            self.memory.append_turn(estado.session_id, texto, role="detetive")
+            self.memory.append_suspicion(estado.session_id, estado.suspeita)
+        except OSError as exc:
+            logger.error(f"Historico do timeout nao gravado: {exc}")
+        return resposta
+
+    # ─── Auxiliares ──────────────────────────────────────────────────────────
+
+    def _resposta_de_partida_encerrada(self, estado: gr.EstadoPartida) -> Dict[str, Any]:
+        """O que ja foi entregue no fim da partida, marcado como ignorado."""
+        if estado.ultima_resposta:
+            resposta = copy.deepcopy(estado.ultima_resposta)
+        else:  # nao deveria ocorrer: partida encerrada sempre tem ultima resposta
+            resposta = self.partida.montar_resposta(
+                copy.deepcopy(estado), self._fallback_base(estado.suspeita))
+        resposta["ignorado"] = True
+        resposta.setdefault("status_investigacao", {})["fim_de_jogo"] = True
+        return resposta
+
+    def _gravar_historico(self, session_id: str, player_text: str,
+                          resposta: Dict[str, Any], estado: gr.EstadoPartida) -> None:
+        """Historico textual e metadados, so DEPOIS de o turno ter terminado bem."""
+        try:
+            self.memory.append_turn(session_id, player_text, role="suspeito")
+            self.memory.append_turn(session_id, resposta.get("texto_detetive", ""), role="detetive")
+            self.memory.append_suspicion(session_id, estado.suspeita)
+            if resposta.get("status_investigacao", {}).get("detectou_mentira"):
+                self.memory.append_contradiction(session_id, resposta["id_turno"])
+        except OSError as exc:
+            logger.error(f"Historico do turno nao gravado: {exc}")
 
     def _repete_fala_anterior(self, session_id: str, texto: str) -> bool:
         """
@@ -454,14 +842,12 @@ Responda com JSON puro (sem ```json):
     # um trecho — "Senhor Reis, onde o senhor estava..." é normal se repetir.
     LIMIAR_REPETICAO = 0.85
 
-    def _fallback_response(self, session_id: str, player_text: str) -> Dict[str, Any]:
-        turno = self.turn_counter.get(session_id, 1)
-
+    def _fallback_base(self, suspeita: int) -> Dict[str, Any]:
         return {
-            "id_turno": turno,
-            "texto_detetive": f"Interessante... você disse: '{player_text}'. Continue.",
+            "id_turno": 0,
+            "texto_detetive": "",
             "status_investigacao": {
-                "nivel_suspeita": 30,
+                "nivel_suspeita": suspeita,
                 "congelar_input": False,
                 "detectou_mentira": False,
                 "fim_de_jogo": False
@@ -472,3 +858,14 @@ Responda com JSON puro (sem ```json):
                 "animacao_trigger": "Thinking"
             }
         }
+
+    def _fallback_response(self, estado: gr.EstadoPartida, caso, temas: List[Tema],
+                           interp: Interpretacao, fatos: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ultimo recurso quando o modelo nao deu nenhuma resposta aproveitavel.
+        A suspeita NAO se mexe (antes caia num 30 arbitrario) e a fala reage ao
+        tipo da declaracao em vez do eco generico "Interessante... continue".
+        """
+        base = self._fallback_base(estado.suspeita)
+        base["texto_detetive"] = self._fala_deterministica(caso, temas, estado, interp, fatos)
+        return base

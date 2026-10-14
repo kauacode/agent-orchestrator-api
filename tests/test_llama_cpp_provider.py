@@ -110,10 +110,7 @@ def _env(**valores):
 
 
 def _sessao_limpa(session_id: str) -> str:
-    mem = ContextMemoryManager(storage_dir="data")
-    for caminho in (mem._session_md_path(session_id), mem._session_version_path(session_id)):
-        if caminho.exists():
-            caminho.unlink()
+    ContextMemoryManager(storage_dir="data").finalizar_sessao(session_id)
     return session_id
 
 
@@ -356,7 +353,9 @@ def test_numeros_fora_da_faixa_sao_limitados():
         req = InterrogateRequest(session_id=_sessao_limpa("llamacpp_faixa"), player_text="Oi.")
         resultado = asyncio.run(interrogate(req, provider=provider))
 
-        assert resultado["status_investigacao"]["nivel_suspeita"] == 100
+        # 150 -> preso em 100 pela faixa; o 1o turno ainda sobe no maximo
+        # MAX_AUMENTO_POR_TURNO (40) a partir de 0.
+        assert resultado["status_investigacao"]["nivel_suspeita"] == 40
         assert resultado["feedback_visual"]["bpm_musica"] == 140
 
 
