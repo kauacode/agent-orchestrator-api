@@ -170,15 +170,32 @@ class ContextMemoryManager:
         return removeu
 
     def cleanup_old_sessions(self, max_age_days: int = 30) -> int:
-        """`max_age_days=0` apaga todas as sessoes."""
-        apagados = 0
+        """
+        `max_age_days=0` apaga todas as sessoes.
+
+        Procura por qualquer arquivo de sessao, nao so pelo historico (.md): uma
+        partida aberta e abandonada sem nenhuma fala (so o timer correu) deixa
+        apenas o _estado.json, que antes nunca era limpo.
+        """
         limite = datetime.now().timestamp() - (max_age_days * 24 * 60 * 60)
+        sufixos = ("_depoimento.md", "_version.json", "_estado.json", "_depoimento.lock")
 
-        for arquivo in self.storage_dir.glob("*_depoimento.md"):
-            if arquivo.stat().st_mtime <= limite:
-                self.finalizar_sessao(arquivo.stem.replace('_depoimento', ''))
+        sessoes = {}
+        for arquivo in self.storage_dir.iterdir():
+            for sufixo in sufixos:
+                if arquivo.name.endswith(sufixo):
+                    sessao = arquivo.name[:-len(sufixo)]
+                    # a sessao vale pelo arquivo mais recente dela
+                    sessoes[sessao] = max(sessoes.get(sessao, 0), arquivo.stat().st_mtime)
+                    break
+
+        apagados = 0
+        for sessao, modificado in sessoes.items():
+            # 0 = todas, sem comparar horario: no Windows o relogio do Python tem
+            # ~15 ms de resolucao e um arquivo recem-escrito pode ficar "no futuro".
+            if max_age_days <= 0 or modificado <= limite:
+                self.finalizar_sessao(sessao)
                 apagados += 1
-
         return apagados
 
     def _update_version(self, session_id: str) -> None:

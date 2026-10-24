@@ -68,3 +68,13 @@ def test_limpeza_total_na_abertura_do_jogo():
 
     assert mem.cleanup_old_sessions(max_age_days=0) == 2
     assert list(mem.storage_dir.iterdir()) == []
+
+
+def test_limpeza_pega_sessao_sem_nenhuma_fala():
+    """Partida abandonada antes da 1a fala deixa so o _estado.json."""
+    mem = ContextMemoryManager(storage_dir=tempfile.mkdtemp(prefix="guilty_sessoes_"))
+    (mem.storage_dir / "player_abandonada_estado.json").write_text("{}", encoding="utf-8")
+    mem.append_turn("player_com_fala", "fala", role="suspeito")
+
+    assert mem.cleanup_old_sessions(max_age_days=0) == 2
+    assert list(mem.storage_dir.iterdir()) == []

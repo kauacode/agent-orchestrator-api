@@ -38,6 +38,7 @@ import llama_cpp
 from app.main import interrogate
 from app.schemas import InterrogateRequest, ResponseContract
 from app.services.llama_cpp_provider import LlamaCppProvider
+from app.services.prompt_orchestrator import PromptOrchestrator
 
 logging.disable(logging.CRITICAL)
 
@@ -58,8 +59,10 @@ ESPERADO_MENTIRA = [False, True, True, False]
 
 # Fatos que so existem na secao VERDADE do caso. O jogador nao os disse e as
 # evidencias nao os contem: se aparecerem na fala do detetive, vazou.
+# "beco", "fumar" e "desvio de dinheiro" ficaram de fora: o caso enriquecido
+# os cita em partes que o detetive PODE usar (ex.: "a porta lateral e o beco
+# nao sao cobertos") — contavam como vazamento falso.
 MARCADORES_DE_VERDADE = [
-    r"desvi\w* de dinheiro", r"\bfuma(r|ndo|va)\b", r"\bbeco\b",
     r"\b20[:h]15\b", r"\b20[:h]26\b", r"\b19[:h]40\b",
     r"marcelo\W+(\w+\W+){0,4}(matou|assassin|culpad|autor do crime)",
     r"(matou|assassin|culpad)\w*\W+(\w+\W+){0,4}marcelo",
@@ -87,7 +90,14 @@ def _checar_saida_bruta(texto: str) -> list:
     if not (limpo.startswith("{") and limpo.endswith("}")):
         problemas.append("texto fora do objeto JSON")
     try:
-        ResponseContract.model_validate(json.loads(limpo))
+        dados = json.loads(limpo)
+        # O modelo nao gera os campos do SISTEMA (id_turno, congelar_input,
+        # fim_de_jogo): o orquestrador os completa antes de validar.
+        dados.setdefault("id_turno", 1)
+        PromptOrchestrator._completar_campos_do_sistema(dados)
+        ResponseContract.model_validate(dados)
+        if PromptOrchestrator._fala_e_exemplo(dados.get("texto_detetive", "")):
+            problemas.append("fala copiada do exemplo do prompt")
     except Exception as exc:
         problemas.append(f"saida crua nao valida no contrato: {type(exc).__name__}")
     return problemas

@@ -1,4 +1,5 @@
 import asyncio
+import re
 import copy
 import difflib
 import json
@@ -196,7 +197,27 @@ Parta do NÍVEL DE SUSPEITA ATUAL (informado junto da fala do jogador) e ajuste:
 5. {nao_revelar}
 6. Responda à FALA DO JOGADOR atual com frases novas; não repita falas suas nem cumprimente de novo
 6b. Avalie você mesmo o TOM da fala. Se o suspeito for agressivo, ofensivo, debochado ou provocador, reaja em personagem — irritação contida e autoridade firme, em uma frase curta que mostre que você notou — antes de seguir com a pergunta. Se for cooperativo ou nervoso, ajuste o tom de acordo. Nunca responda como se a fala fosse neutra quando não for
-7. Retorne APENAS um objeto JSON válido, sem blocos de código markdown"""
+7. Fale pouco: no máximo 2 ou 3 frases curtas, terminando em UMA pergunta
+8. Retorne APENAS um objeto JSON válido, sem blocos de código markdown
+
+{self.REGRA_DO_TEMPO}"""
+
+    # Texto FIXO sobre o tempo de resposta. Fica nas instruções (parte fixa do
+    # prompt, que o llama.cpp reaproveita entre turnos) e não no bloco de tempo
+    # do turno: repetido ali, eram ~150 palavras reprocessadas a cada resposta.
+    # O bloco do turno traz só os valores medidos.
+    REGRA_DO_TEMPO = (
+        "SOBRE O TEMPO MEDIDO PELO SISTEMA (quando o bloco de tempo aparecer): o nível de tempo de "
+        "resposta representa exclusivamente quanto tempo o jogador levou para responder à pergunta "
+        "atual. Ele não representa, por si só, culpa, mentira, confissão, nervosismo ou contradição. "
+        "O conteúdo da resposta, sua coerência com as evidências, as contradições e as informações "
+        "verificáveis continuam sendo os principais fatores para avaliar a suspeita. Use a demora "
+        "apenas como um sinal contextual secundário e fraco. Não aumente a suspeita automaticamente "
+        "apenas porque o tempo de resposta foi médio ou alto, nem trate a demora como evidência "
+        "factual de culpa. O sistema já aplica sozinho um pequeno ajuste pelo tempo: NÃO o inclua no "
+        "nível_suspeita que você propõe. Se o nível for alto, você pode apenas deixar o tom um pouco "
+        "mais pressionador, sem inventar fatos."
+    )
 
     def _historico_compacto(self, session_id: str, player_text: str) -> str:
         """Diálogo enxuto para modelos pequenos (ver ContextMemoryManager.get_dialogo)."""
@@ -376,13 +397,10 @@ EXEMPLOS DE ANÁLISE:
 
 Responda com JSON puro (sem ```json):
 {{
-  "id_turno": 1,
   "texto_detetive": "<escreva aqui a sua fala, em segunda pessoa>",
   "status_investigacao": {{
     "nivel_suspeita": 0-100,
-    "congelar_input": false,
-    "detectou_mentira": true/false,
-    "fim_de_jogo": false
+    "detectou_mentira": true/false
   }},
   "feedback_visual": {{
     "cor_iluminacao": "#HEXCODE",
@@ -411,7 +429,7 @@ FALA DO JOGADOR: "{player_text}"
 tempo_resposta_segundos: {tempo_resposta_s:.1f}
 nivel_tempo_resposta: {nivel}  (baixo: menos de {r.TEMPO_MEDIO_A_PARTIR_S:.0f}s; médio: de {r.TEMPO_MEDIO_A_PARTIR_S:.0f}s a menos de {r.TEMPO_ALTO_A_PARTIR_S:.0f}s; alto: de {r.TEMPO_ALTO_A_PARTIR_S:.0f}s a {r.PRAZO_RESPOSTA_S:.0f}s)
 status_tempo_resposta: dentro_do_prazo
-O nível de tempo de resposta representa exclusivamente quanto tempo o jogador levou para responder à pergunta atual. Ele não representa, por si só, culpa, mentira, confissão, nervosismo ou contradição. O conteúdo da resposta, sua coerência com as evidências, as contradições e as informações verificáveis continuam sendo os principais fatores para avaliar a suspeita. Use a demora apenas como um sinal contextual secundário e fraco. Não aumente a suspeita automaticamente apenas porque o tempo de resposta foi médio ou alto, nem trate a demora como evidência factual de culpa. O sistema já aplica sozinho um pequeno ajuste pelo tempo: NÃO o inclua no nível_suspeita que você propõe. Se o nível for alto, você pode apenas deixar o tom um pouco mais pressionador, sem inventar fatos."""
+(Como usar este sinal: ver SOBRE O TEMPO MEDIDO PELO SISTEMA, nas instruções.)"""
 
     def _sufixo_dinamico(self, estado, interp, fatos, caso, diretiva: str,
                          tempo_resposta_s: Optional[float] = None) -> str:
@@ -444,13 +462,10 @@ FALA DO JOGADOR: "{player_text}"
 
 Responda com JSON puro (sem ```json):
 {{
-  "id_turno": 1,
   "texto_detetive": "<escreva aqui a sua fala, em segunda pessoa>",
   "status_investigacao": {{
     "nivel_suspeita": 0-100,
-    "congelar_input": false,
-    "detectou_mentira": false,
-    "fim_de_jogo": false
+    "detectou_mentira": false
   }},
   "feedback_visual": {{
     "cor_iluminacao": "#HEXCODE",
@@ -641,6 +656,7 @@ Responda com JSON puro (sem ```json):
             try:
                 # id_turno e provisorio; o definitivo vem do estado da partida
                 dados['id_turno'] = trabalho.turno + 1
+                self._completar_campos_do_sistema(dados)
                 ResponseContract.model_validate(dados)
             except Exception:
                 tentativas += 1
@@ -648,6 +664,15 @@ Responda com JSON puro (sem ```json):
                 continue
 
             texto = dados['texto_detetive']
+
+            if self._fala_e_exemplo(texto):
+                # Visto na validacao com o Qwen 2.5 3B: a fala veio literalmente
+                # "<escreva aqui a sua fala, em segunda pessoa>", copiada do
+                # modelo de JSON do prompt. Contrato valido, mas o jogador veria
+                # o placeholder na prancheta.
+                logger.warning(f"Provedor {provider.nome} copiou o exemplo do prompt; tentando de novo.")
+                tentativas += 1
+                continue
 
             repetidos = self.partida.temas_repetidos(trabalho, texto, temas, fatos)
             if repetidos:
@@ -691,8 +716,49 @@ Responda com JSON puro (sem ```json):
         if not resultado:
             resultado = self._fallback_response(trabalho, caso, temas, interp, fatos)
 
+        if trabalho.turno >= 1:
+            resultado['texto_detetive'] = self._sem_saudacao(resultado.get('texto_detetive', ''))
         self._limitar_faixas(resultado)
         return resultado
+
+    @staticmethod
+    def _fala_e_exemplo(texto: str) -> bool:
+        """Fala vazia ou copiada do modelo de JSON do prompt (placeholder)."""
+        limpo = (texto or "").strip()
+        return (not limpo
+                or "escreva aqui a sua fala" in limpo.lower()
+                or (limpo.startswith("<") and limpo.endswith(">")))
+
+    @staticmethod
+    def _completar_campos_do_sistema(dados: Dict[str, Any]) -> None:
+        """
+        congelar_input e fim_de_jogo sao decididos pelo SISTEMA (PartidaService)
+        e id_turno pelo estado da partida: o modelo nao os gera mais. Eram ~25
+        tokens por resposta escritos so para serem sobrescritos — no Qwen em CPU,
+        segundos por turno. Aqui entram com valor neutro so para o contrato
+        validar; o valor final continua vindo do sistema.
+        """
+        status = dados.get('status_investigacao')
+        if isinstance(status, dict):
+            status.setdefault('congelar_input', False)
+            status.setdefault('fim_de_jogo', False)
+
+    _SAUDACAO = re.compile(
+        r"^\s*(boa\s+(noite|tarde)|bom\s+dia|ol[áa])\b[\s,.!]*"
+        r"((senhor|sr\.?)\s+\w+|daniel)?[\s,.!]*", re.IGNORECASE)
+
+    @classmethod
+    def _sem_saudacao(cls, texto: str) -> str:
+        """
+        "Boa noite, senhor Reis." no começo de TODA fala, apesar da instrução:
+        visto em 2 de 3 turnos nas medições com o Qwen. A partir do 2º turno o
+        cumprimento sai — só se sobrar uma fala de verdade depois dele.
+        """
+        resto = cls._SAUDACAO.sub("", texto, count=1)
+        if resto == texto or len(resto.strip()) < 15:
+            return texto
+        resto = resto.strip()
+        return resto[0].upper() + resto[1:]
 
     def _fala_deterministica(self, caso: Optional[Dict[str, Any]], temas: List[Tema],
                              estado: gr.EstadoPartida, interp: Interpretacao,
