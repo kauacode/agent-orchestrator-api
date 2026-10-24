@@ -58,8 +58,10 @@ ESPERADO_MENTIRA = [False, True, True, False]
 
 # Fatos que so existem na secao VERDADE do caso. O jogador nao os disse e as
 # evidencias nao os contem: se aparecerem na fala do detetive, vazou.
+# "beco", "fumar" e "desvio de dinheiro" ficaram de fora: o caso enriquecido
+# os cita em partes que o detetive PODE usar (ex.: "a porta lateral e o beco
+# nao sao cobertos") — contavam como vazamento falso.
 MARCADORES_DE_VERDADE = [
-    r"desvi\w* de dinheiro", r"\bfuma(r|ndo|va)\b", r"\bbeco\b",
     r"\b20[:h]15\b", r"\b20[:h]26\b", r"\b19[:h]40\b",
     r"marcelo\W+(\w+\W+){0,4}(matou|assassin|culpad|autor do crime)",
     r"(matou|assassin|culpad)\w*\W+(\w+\W+){0,4}marcelo",
