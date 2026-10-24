@@ -38,6 +38,7 @@ import llama_cpp
 from app.main import interrogate
 from app.schemas import InterrogateRequest, ResponseContract
 from app.services.llama_cpp_provider import LlamaCppProvider
+from app.services.prompt_orchestrator import PromptOrchestrator
 
 logging.disable(logging.CRITICAL)
 
@@ -89,7 +90,14 @@ def _checar_saida_bruta(texto: str) -> list:
     if not (limpo.startswith("{") and limpo.endswith("}")):
         problemas.append("texto fora do objeto JSON")
     try:
-        ResponseContract.model_validate(json.loads(limpo))
+        dados = json.loads(limpo)
+        # O modelo nao gera os campos do SISTEMA (id_turno, congelar_input,
+        # fim_de_jogo): o orquestrador os completa antes de validar.
+        dados.setdefault("id_turno", 1)
+        PromptOrchestrator._completar_campos_do_sistema(dados)
+        ResponseContract.model_validate(dados)
+        if PromptOrchestrator._fala_e_exemplo(dados.get("texto_detetive", "")):
+            problemas.append("fala copiada do exemplo do prompt")
     except Exception as exc:
         problemas.append(f"saida crua nao valida no contrato: {type(exc).__name__}")
     return problemas

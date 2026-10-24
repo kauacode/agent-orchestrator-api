@@ -12,6 +12,7 @@ saida e garantido por gramatica, nao pela obediencia do modelo.
 import asyncio
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -77,12 +78,48 @@ def _n_gpu_layers_do_env() -> int:
     return _env_int("LLAMA_CPP_N_GPU_LAYERS", LLAMA_CPP_N_GPU_LAYERS_PADRAO)
 
 
+def _nucleos_fisicos_windows() -> Optional[int]:
+    """Núcleos FÍSICOS via GetLogicalProcessorInformationEx (sem dependência nova)."""
+    import ctypes
+    from ctypes import wintypes
+
+    RELACAO_NUCLEO = 0  # RelationProcessorCore
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    tamanho = wintypes.DWORD(0)
+    kernel32.GetLogicalProcessorInformationEx(RELACAO_NUCLEO, None, ctypes.byref(tamanho))
+    if tamanho.value == 0:
+        return None
+    buffer = ctypes.create_string_buffer(tamanho.value)
+    if not kernel32.GetLogicalProcessorInformationEx(RELACAO_NUCLEO, buffer, ctypes.byref(tamanho)):
+        return None
+    # Registros de tamanho variável: Relationship (DWORD) + Size (DWORD) + ...
+    nucleos, deslocamento = 0, 0
+    while deslocamento < tamanho.value:
+        registro = ctypes.cast(ctypes.byref(buffer, deslocamento), ctypes.POINTER(wintypes.DWORD * 2)).contents
+        if registro[1] == 0:
+            break
+        if registro[0] == RELACAO_NUCLEO:
+            nucleos += 1
+        deslocamento += registro[1]
+    return nucleos or None
+
+
 def _threads_padrao() -> int:
-    # os.cpu_count() conta nucleos LOGICOS. Com SMT, metade disso aproxima os
-    # fisicos — que e o que rende no llama.cpp: threads alem dos nucleos
-    # fisicos disputam a mesma unidade de calculo e a geracao fica MAIS lenta.
-    # E a mesma heuristica do proprio llama-cpp-python; calculada aqui so para
-    # aparecer no log. psutil daria o numero exato, mas seria dependencia nova.
+    """
+    Uma thread por núcleo FÍSICO: threads além disso disputam a mesma unidade
+    de cálculo e a geração fica MAIS lenta.
+
+    A regra anterior ("lógicos ÷ 2", a mesma do llama-cpp-python) só acerta em
+    CPU com hyper-threading. Num i5 de 4 núcleos SEM HT — comum em notebook
+    antigo — ela usava 2 threads e deixava metade da CPU parada.
+    """
+    if sys.platform == "win32":
+        try:
+            fisicos = _nucleos_fisicos_windows()
+            if fisicos:
+                return fisicos
+        except Exception as exc:  # API indisponível: cai na regra antiga
+            logger.warning(f"Nao foi possivel contar os nucleos fisicos: {exc}")
     return max(1, (os.cpu_count() or 2) // 2)
 
 
@@ -126,11 +163,31 @@ def _schema_da_gramatica() -> Dict[str, Any]:
     para nao endurecer a validacao do Gemini, que nunca precisou disso.
 
     Faixas de inteiro (minimum/maximum) nao entram: o conversor da lib ignora.
+
+    Os campos que o SISTEMA decide (id_turno, congelar_input, fim_de_jogo)
+    saem da gramatica: o modelo os escrevia so para o servidor sobrescrever.
+    Medido no Qwen 2.5 3B em CPU, gramatica menor = menos tokens gerados e
+    menos custo de checagem: 43,8 s -> 26,8 s numa resposta com prompt inteiro.
+    O orquestrador os preenche antes de validar (_completar_campos_do_sistema).
     """
     schema = _schema_sem_refs(ResponseContract.model_json_schema())
+    for campo in CAMPOS_DO_SISTEMA["raiz"]:
+        schema["properties"].pop(campo, None)
+        schema["required"] = [c for c in schema["required"] if c != campo]
+    status = schema["properties"]["status_investigacao"]
+    for campo in CAMPOS_DO_SISTEMA["status_investigacao"]:
+        status["properties"].pop(campo, None)
+        status["required"] = [c for c in status["required"] if c != campo]
     visual = schema["properties"]["feedback_visual"]["properties"]
     visual["cor_iluminacao"]["pattern"] = "^#[0-9A-Fa-f]{6}$"
     return schema
+
+
+# Decididos pelo sistema, nunca pelo modelo.
+CAMPOS_DO_SISTEMA = {
+    "raiz": ("id_turno",),
+    "status_investigacao": ("congelar_input", "fim_de_jogo"),
+}
 
 
 # Calculado uma vez: o contrato nao muda em tempo de execucao.
@@ -169,6 +226,7 @@ class LlamaCppProvider(LLMProvider):
         self.max_tokens = max_tokens or _env_int("LLAMA_CPP_MAX_TOKENS", LLAMA_CPP_MAX_TOKENS_PADRAO)
         self.temperature = (temperature if temperature is not None
                             else _env_float("LLAMA_CPP_TEMPERATURE", LLAMA_CPP_TEMPERATURA_PADRAO))
+        self.flash_attn = os.getenv("LLAMA_CPP_FLASH_ATTN", "1").strip() not in ("0", "false", "nao", "")
 
         self._llm = None
         # Uma instancia de Llama NAO e thread-safe (um unico KV cache). Duas
@@ -199,13 +257,25 @@ class LlamaCppProvider(LLMProvider):
 
         inicio = time.perf_counter()
         try:
-            llm = Llama(
+            parametros = dict(
                 model_path=str(self.model_path),
                 n_ctx=self.n_ctx,
                 n_gpu_layers=self.n_gpu_layers,
                 n_threads=self.n_threads,
                 verbose=False,
             )
+            try:
+                # flash_attn: medido no Qwen 2.5 3B em CPU, 43,8 s -> 31,1 s numa
+                # resposta com o prompt inteiro (prompt 89 -> 118 tok/s, geracao
+                # 7,1 -> 10,7 tok/s). Desligavel por LLAMA_CPP_FLASH_ATTN=0.
+                llm = Llama(**parametros, flash_attn=self.flash_attn)
+            except Exception:
+                if not self.flash_attn:
+                    raise
+                # CPU/build que nao aceita: segue sem, em vez de ficar sem detetive.
+                logger.warning("flash_attn recusado pelo llama.cpp; carregando sem.")
+                self.flash_attn = False
+                llm = Llama(**parametros)
         except Exception as exc:
             # .gguf corrompido, download pela metade, arquitetura que a versao
             # instalada da lib nao conhece (modelo novo demais)...
@@ -215,7 +285,8 @@ class LlamaCppProvider(LLMProvider):
 
         logger.info(
             f"llama.cpp carregou {self.model_path.name} em {time.perf_counter() - inicio:.1f}s "
-            f"(n_ctx={self.n_ctx}, n_threads={self.n_threads}, n_gpu_layers={self.n_gpu_layers})"
+            f"(n_ctx={self.n_ctx}, n_threads={self.n_threads}, n_gpu_layers={self.n_gpu_layers}, "
+            f"flash_attn={self.flash_attn})"
         )
         return llm
 

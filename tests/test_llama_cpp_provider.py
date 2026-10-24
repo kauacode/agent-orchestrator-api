@@ -250,18 +250,36 @@ def test_resposta_cortada_cai_no_fallback_do_orquestrador():
 
 # ─── Contrato e prompt ──────────────────────────────────────────────────────
 
-def test_schema_da_gramatica_cobre_os_campos_do_unity():
-    """Os campos que o ApiModels.cs desserializa precisam ser obrigatorios."""
-    assert set(SCHEMA_CONTRATO["required"]) == {
-        "id_turno", "texto_detetive", "status_investigacao", "feedback_visual",
-    }
+def test_gramatica_pede_so_o_que_o_modelo_decide():
+    """
+    id_turno, congelar_input e fim_de_jogo sao do SISTEMA: fora da gramatica,
+    o modelo deixa de gerar tokens que o servidor sobrescreveria. O contrato
+    COMPLETO que o Unity recebe e conferido no teste seguinte.
+    """
+    assert set(SCHEMA_CONTRATO["required"]) == {"texto_detetive", "status_investigacao", "feedback_visual"}
     props = SCHEMA_CONTRATO["properties"]
-    assert set(props["status_investigacao"]["required"]) == {
-        "nivel_suspeita", "congelar_input", "detectou_mentira", "fim_de_jogo",
-    }
-    assert set(props["feedback_visual"]["required"]) == {
-        "cor_iluminacao", "bpm_musica", "animacao_trigger",
-    }
+    assert set(props["status_investigacao"]["required"]) == {"nivel_suspeita", "detectou_mentira"}
+    # bpm e animacao continuam: serao usados pela trilha/animacao do detetive
+    assert set(props["feedback_visual"]["required"]) == {"cor_iluminacao", "bpm_musica", "animacao_trigger"}
+
+
+def test_resposta_ao_unity_continua_completa_sem_os_campos_do_sistema():
+    """O modelo nao gera mais os campos do sistema; o Unity continua recebendo todos."""
+    with _llama_cpp_falso() as falso:
+        enxuta = {
+            "texto_detetive": "Prossiga com o seu relato, por favor.",
+            "status_investigacao": {"nivel_suspeita": 30, "detectou_mentira": False},
+            "feedback_visual": {"cor_iluminacao": "#AA3333", "bpm_musica": 100, "animacao_trigger": "Neutral"},
+        }
+        falso.conteudo = json.dumps(enxuta)
+        provider = LlamaCppProvider(model_path=str(GGUF_FALSO))
+        req = InterrogateRequest(session_id=_sessao_limpa("llamacpp_enxuta"), player_text="Eu estava em casa.")
+        resultado = asyncio.run(interrogate(req, provider=provider))
+
+        ResponseContract.model_validate(resultado)
+        assert resultado["id_turno"] == 1
+        assert {"congelar_input", "fim_de_jogo"} <= set(resultado["status_investigacao"])
+        assert len(falso.chamadas) == 1   # sem retry por "contrato invalido"
 
 
 def test_prompt_compacto_tem_um_exemplo_e_nao_cita_verdade():
@@ -362,3 +380,43 @@ def test_numeros_fora_da_faixa_sao_limitados():
 def test_n_gpu_layers_auto_vira_menos_um():
     with _env(LLAMA_CPP_N_GPU_LAYERS="auto"):
         assert LlamaCppProvider(model_path=str(GGUF_FALSO)).n_gpu_layers == -1
+
+
+def test_saudacao_repetida_sai_a_partir_do_segundo_turno():
+    """Visto nas medicoes: "Boa noite, senhor Reis." no comeco de quase toda fala."""
+    tira = PromptOrchestrator._sem_saudacao
+    assert tira("Boa noite, senhor Reis. Onde o senhor esteve?") == "Onde o senhor esteve?"
+    assert tira("Olá, Daniel! Por que mentiu sobre o crachá?") == "Por que mentiu sobre o crachá?"
+    # so o cumprimento: melhor manter do que mandar fala vazia
+    assert tira("Boa noite, senhor Reis.") == "Boa noite, senhor Reis."
+    # "boa noite" no meio da frase nao e saudacao
+    assert tira("O senhor disse boa noite ao vigia?") == "O senhor disse boa noite ao vigia?"
+
+
+def test_fala_copiada_do_exemplo_do_prompt_e_refeita():
+    """Visto na validacao: o Qwen devolveu o placeholder do modelo de JSON como fala."""
+    with _llama_cpp_falso() as falso:
+        respostas = [
+            {"texto_detetive": "<escreva aqui a sua fala, em segunda pessoa>",
+             "status_investigacao": {"nivel_suspeita": 30, "detectou_mentira": False},
+             "feedback_visual": {"cor_iluminacao": "#AA3333", "bpm_musica": 100, "animacao_trigger": "N"}},
+            {"texto_detetive": "Prossiga com o seu relato, por favor.",
+             "status_investigacao": {"nivel_suspeita": 30, "detectou_mentira": False},
+             "feedback_visual": {"cor_iluminacao": "#AA3333", "bpm_musica": 100, "animacao_trigger": "N"}},
+        ]
+        criar_original = falso.create_chat_completion
+
+        def roteiro(self, **kwargs):
+            falso.conteudo = json.dumps(respostas[min(len(falso.chamadas), 1)])
+            return criar_original(self, **kwargs)
+
+        falso.create_chat_completion = roteiro
+        try:
+            provider = LlamaCppProvider(model_path=str(GGUF_FALSO))
+            req = InterrogateRequest(session_id=_sessao_limpa("llamacpp_placeholder"), player_text="Eu estava em casa.")
+            resultado = asyncio.run(interrogate(req, provider=provider))
+        finally:
+            falso.create_chat_completion = criar_original
+
+        assert resultado["texto_detetive"] == "Prossiga com o seu relato, por favor."
+        assert len(falso.chamadas) == 2
