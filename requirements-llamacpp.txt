@@ -12,6 +12,6 @@
 # "cpu" por "cu121"/"cu124" conforme o CUDA instalado.
 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-# 0.3.9+ por causa da arquitetura qwen3: abaixo disso so da para testar os
-# modelos da familia Qwen2.5/Llama 3.x, e trocar de modelo vira trocar de lib.
-llama-cpp-python>=0.3.9
+# Fixa na versao testada (wheel pronta para CPU com AVX2, suporte a qwen3 e a
+# flash_attn). Atualizar = rodar scripts/validar_llamacpp_real.py de novo.
+llama-cpp-python==0.3.36
