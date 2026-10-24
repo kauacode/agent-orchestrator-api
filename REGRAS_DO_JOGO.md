@@ -54,7 +54,7 @@ O valor foi mantido (não era uma simples troca de 12 por 10) e fica em `LIMITE_
   instrução de que é um sinal contextual fraco, **não** prova de culpa/mentira/nervosismo, e de
   **não** incluir o efeito do tempo na suspeita que propõe.
 * Separação de efeitos: suspeita final = proposta semântica do modelo (presa a +40/−25) **+** efeito
-  da faixa (0/+1/+2, aplicado uma vez pelo sistema) **+** bônus de confissão. O efeito antigo
+  da faixa (0/+1/+2, aplicado uma vez pelo sistema), com o piso da confissão (85/100) por cima. O efeito antigo
   contínuo de até +5 foi **removido** (era excessivo para um sinal secundário e duplicaria o novo).
 
 ## Timeout
@@ -65,8 +65,10 @@ O valor foi mantido (não era uma simples troca de 12 por 10) e fica em `LIMITE_
 
 ## Confissão e perguntas repetidas
 * `interpretador.py` classifica cada fala (confissão / negação / evasiva / informação / ambígua) por
-  frases e escopo de negação. Confessar **não encerra** a partida: soma `+25` uma vez; negar e
-  depois confessar (ou o inverso) marca contradição pelo sistema.
+  frases e escopo de negação. A 1ª confissão leva a suspeita a **pelo menos 85**
+  (`PISO_PRIMEIRA_CONFISSAO`, começa a sequência de 80%) e **não encerra** a partida: o detetive
+  ainda confronta os detalhes. Confirmar a confissão leva a **100** (`PISO_CONFISSAO_REPETIDA`)
+  e encerra. Negar e depois confessar (ou o inverso) marca contradição pelo sistema.
 * Tema já esclarecido não é perguntado de novo, a menos que o jogador traga algo novo sobre ele.
   Fala repetida é recusada, o modelo recebe uma correção e, se insistir, o sistema a substitui.
 
@@ -80,7 +82,7 @@ O valor foi mantido (não era uma simples troca de 12 por 10) e fica em `LIMITE_
 | Teto 10 turnos | pedido, rodada 2 | `Regras.MAX_TURNOS` | novo valor (era 12, nossa proposta) |
 | Corte 60% no limite | rodada 1 (nossa) | `LIMITE_DERROTA_SUSPEITA` | mantido; justificado acima |
 | Variação +40/−25 por turno | rodada 1 (nossa) | `suspeita_do_turno` | mantida: vem das âncoras do caso ("+25 a +40", "−10 a −25") e impede saltos arbitrários; não conflita com as demais |
-| Confissão +25 uma vez | rodada 1 (nossa) | `BONUS_CONFISSAO` | mantida (flag em decisão pendente) |
+| Confissão: piso de 85, confirmar = 100 | rodada 1 (nossa), revista | `PISO_PRIMEIRA_CONFISSAO` / `PISO_CONFISSAO_REPETIDA` | substitui o antigo "+25 uma vez" (`BONUS_CONFISSAO` não existe mais): "eu matei" valia menos que uma mentira |
 | Timeout +15 | rodada 1 (nossa) | `PENALIDADE_TIMEOUT` | mantido |
 | Penalidade de tempo contínua até +5 | rodada 1 (nossa) | — | **removida**; substituída pelas faixas 0/+1/+2 |
 | Recusa de fala repetitiva | rodada 1 (nossa) | `_gerar_fala` | mantida |
