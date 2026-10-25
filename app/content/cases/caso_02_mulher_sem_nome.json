@@ -1,0 +1,373 @@
+{
+  "case_id": "CASO 02",
+  "titulo": "A Mulher Sem Nome",
+  "resumo_publico": "Uma mulher sem identificação é retirada da água no Cais 4 do porto. Uma câmera filmou uma figura encapuzada ao lado dela na madrugada do crime, e o conferente que ficou quase uma hora sem responder ao rádio é levado para interrogatório.",
+  "abertura": {
+    "_comentario": "Fala de abertura mostrada pelo jogo antes da 1a resposta (CaseInfo.openingLine do cartão CASO 02, na CaseSelectionScene). O estado parte dela: sem isso o detetive nao sabe que ja perguntou sobre o radio.",
+    "tema": "radio_mudo",
+    "pergunta": "Por que o seu rádio ficou mudo por quase uma hora na madrugada de 3 de agosto?"
+  },
+  "contexto_geral": "Na madrugada de 3 de agosto, sob chuva forte, o Terminal de Contêineres do Cais Norte, no Porto de Santa Luzia, operava com o turno da noite completo. Às 05:40, a tripulação de um rebocador retirou da água, ao lado do Cais 4, o corpo de uma mulher de capa de chuva amarela, sem documentos. Ninguém no terminal a reconheceu. Caio Brandão, conferente de carga que trabalhava no Pátio B, vizinho ao Cais 4, ficou quase uma hora sem responder aos chamados do rádio naquela madrugada.",
+  "local_e_periodo": {
+    "local": "Terminal de Contêineres do Cais Norte, Porto de Santa Luzia — Cais 4 e pilha B-12",
+    "periodo_do_crime": "madrugada de 3 de agosto, entre 02:00 e 03:00 (laudo)",
+    "descoberta": "05:40 do mesmo dia, corpo retirado da água pela tripulação de um rebocador"
+  },
+  "papel_do_jogador": {
+    "nome": "Caio Brandão",
+    "funcao": "Conferente de carga do turno da noite no Terminal do Cais Norte",
+    "situacao": "Suspeito principal. Foi visto conversando com a vítima horas antes, ficou quase uma hora sem responder ao rádio e trabalhava a poucos metros do Cais 4.",
+    "instrucao_ao_detetive": "O interlocutor É o suspeito, não uma testemunha. Trate-o como tal: nada de 'cidadão' ou 'testemunha'. Chame-o de Caio ou 'senhor Brandão'."
+  },
+  "vitima": {
+    "nome": "uma mulher não identificada",
+    "idade": "cerca de 30",
+    "funcao": "Desconhecida — entrou no terminal com crachá de visitante",
+    "historico": "Na verdade, Irene Valadares, 31 anos, perita de uma seguradora marítima. Investigava contêineres declarados como caídos no mar durante tempestades e entrou no terminal com nome falso para fotografar a pilha B-12. Ninguém no terminal sabe quem ela é.",
+    "como_foi_morto": "Golpe na nuca contra a quina de um contêiner. Já estava morta quando foi jogada na água."
+  },
+  "relacoes": [
+    {
+      "entre": "Caio Brandão e a vítima",
+      "natureza": "Desconhecidos. Conversaram uma única vez, às 23:50, perto do Pátio B: ela pediu informação."
+    },
+    {
+      "entre": "Caio Brandão e Wagner Prates",
+      "natureza": "Subordinado e supervisor do turno da noite. Wagner foi quem registrou o rádio mudo de Caio."
+    },
+    {
+      "entre": "A vítima e Wagner Prates",
+      "natureza": "Ela investigava os sinistros que ele forjava para revender a carga (só o detetive-IA conhece essa ligação)."
+    }
+  ],
+  "_comentario_verdade": "Isto é o que DE FATO aconteceu. Serve para julgar as falas do suspeito. O detetive NUNCA revela nada daqui que não esteja também em evidencias_conhecidas.",
+  "verdade": {
+    "culpado": "Wagner Prates, o supervisor do turno da noite",
+    "jogador_e_culpado": false,
+    "o_que_aconteceu": "Wagner Prates declarava contêineres como caídos no mar durante tempestades e revendia a carga, guardada repintada na pilha B-12. A mulher era uma perita de seguradora que foi fotografar essa pilha. Wagner a viu, pegou a capa de chuva número 17, de Caio, pendurada do lado de fora do contêiner de descanso (a dele tem uma faixa laranja de supervisor que a câmera mostraria), aproximou-se dela fingindo ajudar e a matou por volta das 02:25 entre as pilhas. Jogou o corpo e depois a capa na água, junto ao Cais 4. Caio não estava lá: dormia escondido no contêiner de descanso do Pátio B, com o rádio desligado, entre 01:50 e 02:40 — falta grave que ele tem vergonha de admitir.",
+    "linha_do_tempo": [
+      {
+        "hora": "23:31",
+        "fato": "A mulher entra pelo Portão 2 com crachá de visitante em nome de 'Ana Souza'."
+      },
+      {
+        "hora": "23:50",
+        "fato": "Ela pergunta a Caio, perto do Pátio B, onde fica a pilha B-12. Ele aponta o caminho. Um estivador vê a conversa."
+      },
+      {
+        "hora": "01:49",
+        "fato": "Última leitura de contêiner no coletor de dados de Caio."
+      },
+      {
+        "hora": "01:50",
+        "fato": "Caio pendura a capa número 17, encharcada, no gancho de fora do contêiner de descanso, desliga o rádio e dorme lá dentro, sozinho."
+      },
+      {
+        "hora": "01:55",
+        "fato": "O operador do guindaste vê a capa pendurada no gancho."
+      },
+      {
+        "hora": "02:00",
+        "fato": "Wagner pega a capa número 17 no gancho."
+      },
+      {
+        "hora": "02:12",
+        "fato": "A câmera do Cais 4 filma Wagner, de capa azul e capuz, caminhando com a mulher em direção à pilha B-12."
+      },
+      {
+        "hora": "02:25",
+        "fato": "Wagner mata a mulher entre as pilhas; o celular dela cai num vão da pilha B-12."
+      },
+      {
+        "hora": "02:31",
+        "fato": "Wagner joga o corpo e depois a capa número 17 na água, junto ao Cais 4."
+      },
+      {
+        "hora": "02:40",
+        "fato": "Caio acorda, não encontra a capa no gancho e não comunica o sumiço para não revelar que dormia."
+      },
+      {
+        "hora": "02:43",
+        "fato": "Caio religa o rádio e responde ao chamado."
+      },
+      {
+        "hora": "02:51",
+        "fato": "Caio retira uma capa reserva no vestiário com o próprio crachá."
+      },
+      {
+        "hora": "05:40",
+        "fato": "O corpo é retirado da água pela tripulação de um rebocador."
+      }
+    ],
+    "motivacoes": {
+      "Wagner Prates": "A perita estava a um passo de provar a fraude dos contêineres; a morte dela protegia o esquema e o emprego.",
+      "Caio Brandão": "Nenhuma contra a vítima. O que ele esconde é ter dormido em serviço com o rádio desligado, o que pode custar o emprego."
+    },
+    "segredos_que_nao_devem_ser_revelados_antes_da_hora": [
+      "A identidade real da vítima e que ela era perita de uma seguradora.",
+      "A fraude dos contêineres declarados como caídos no mar.",
+      "Que Wagner Prates usou a capa de Caio e esteve no Cais 4."
+    ],
+    "contradicoes_que_o_suspeito_pode_gerar": [
+      "Dizer que estava trabalhando ou conferindo carga entre 01:49 e 02:47 (o coletor de dados não registrou nenhuma leitura).",
+      "Negar que falou com a mulher (um estivador viu a conversa às 23:50).",
+      "Dizer que ficou com a própria capa a madrugada inteira (a capa 17 foi achada na água e ele retirou uma reserva às 02:51).",
+      "Dizer que estava acompanhado durante o silêncio do rádio (estava sozinho no contêiner de descanso)."
+    ],
+    "condicoes_para_resolver": "O suspeito é inocente. O caso se resolve a favor dele quando admite, sem se contradizer, que dormia no contêiner de descanso com o rádio desligado entre cerca de 01:50 e 02:40, que deixou a capa pendurada do lado de fora e que ela tinha sumido quando acordou — e quando explica a conversa das 23:50 como um simples pedido de informação. Apontar que qualquer pessoa do turno poderia ter vestido a capa dele é o caminho para virar a suspeita."
+  },
+  "conhecimento_do_suspeito": {
+    "_comentario": "O que Caio Brandão (o jogador) sabe/viveu. O detetive-IA NÃO deve presumir nada daqui além do que ele declarar.",
+    "sabe": [
+      "Que às 23:50 uma mulher de capa amarela lhe perguntou onde ficava a pilha B-12, e ele apontou o caminho.",
+      "Que às 01:50 pendurou a capa número 17 no gancho de fora do contêiner de descanso, desligou o rádio e dormiu lá dentro, sozinho.",
+      "Que acordou às 02:40, não achou a capa e religou o rádio às 02:43.",
+      "Que retirou uma capa reserva no vestiário às 02:51 e não contou a ninguém que a dele tinha sumido."
+    ],
+    "nao_sabe": [
+      "Quem era a mulher.",
+      "Quem a matou.",
+      "Que a capa dele foi parar na água."
+    ],
+    "pode_ter_notado": "Ao acordar, uma caminhonete do terminal com os faróis apagados perto do Cais 4 — só se o jogador decidir inventar/contar."
+  },
+  "_comentario_evidencias": "Isto é o que o detetive TEM EM MÃOS. É a única coisa que ele pode citar, mostrar ou usar para pressionar.",
+  "evidencias_conhecidas": [
+    {
+      "id": "laudo_horario",
+      "descricao": "O laudo estima a morte entre 02:00 e 03:00. Golpe na nuca; ela já estava morta quando caiu na água.",
+      "fonte": "Perícia",
+      "a_partir_do_turno": 1
+    },
+    {
+      "id": "radio_mudo",
+      "descricao": "O rádio de Caio Brandão não respondeu a nenhum dos três chamados feitos entre 01:52 e 02:43.",
+      "fonte": "Central de rádio do terminal",
+      "a_partir_do_turno": 1
+    },
+    {
+      "id": "camera_cais4",
+      "descricao": "A câmera do Cais 4 registrou, às 02:12, uma pessoa de capa de chuva azul com capuz caminhando ao lado de uma mulher de capa amarela em direção à pilha B-12. O rosto não aparece.",
+      "fonte": "Segurança portuária",
+      "a_partir_do_turno": 1
+    },
+    {
+      "id": "conversa_2350",
+      "descricao": "Um estivador viu Caio conversando com uma mulher de capa amarela perto do Pátio B por volta das 23:50.",
+      "fonte": "Depoimento de terceiros",
+      "a_partir_do_turno": 2
+    },
+    {
+      "id": "coletor_sem_leitura",
+      "descricao": "O coletor de dados de Caio não registrou nenhuma leitura de contêiner entre 01:49 e 02:47.",
+      "fonte": "Sistema do terminal",
+      "a_partir_do_turno": 2
+    },
+    {
+      "id": "capas_iguais",
+      "descricao": "Todo o turno da noite, 23 pessoas, usa a mesma capa azul com capuz; as capas são numeradas por dentro. O contêiner de descanso do Pátio B não tem câmera.",
+      "fonte": "Segurança portuária",
+      "a_partir_do_turno": 3
+    },
+    {
+      "id": "cracha_falso",
+      "descricao": "A mulher entrou pelo Portão 2 às 23:31 com um crachá de visitante em nome de 'Ana Souza'. O CPF informado não existe.",
+      "fonte": "Controle de acesso",
+      "a_partir_do_turno": 5
+    },
+    {
+      "id": "capa_na_agua",
+      "descricao": "Uma capa azul com o número 17 — a de Caio — foi retirada da água ao lado do Cais 4.",
+      "fonte": "Mergulhadores da perícia",
+      "a_partir_do_turno": 6
+    },
+    {
+      "id": "capa_no_gancho",
+      "descricao": "O operador do guindaste viu uma capa azul pendurada no gancho de fora do contêiner de descanso às 01:55; às 02:15 o gancho estava vazio.",
+      "fonte": "Depoimento de terceiros",
+      "a_partir_do_turno": 7
+    },
+    {
+      "id": "capa_reserva",
+      "descricao": "O vestiário registra que o crachá de Caio retirou uma capa reserva às 02:51.",
+      "fonte": "Controle de acesso",
+      "a_partir_do_turno": 8
+    },
+    {
+      "id": "celular_b12",
+      "descricao": "Um celular achado num vão da pilha B-12 tem fotos dos números de três contêineres que o terminal declarou como caídos no mar no mês passado.",
+      "fonte": "Perícia",
+      "a_partir_do_turno": 9
+    }
+  ],
+  "_comentario_lacunas": "O que o detetive NÃO sabe. É isto que ele tenta arrancar no interrogatório — e o que torna o jogo jogável.",
+  "lacunas": [
+    "Onde Caio esteve entre 01:52 e 02:43, com o rádio mudo.",
+    "O que a mulher conversou com Caio às 23:50.",
+    "Quem vestia a capa azul filmada no Cais 4 às 02:12.",
+    "Quem era a mulher e o que ela procurava na pilha B-12."
+  ],
+  "_comentario_suspeita": "Âncoras para o nivel_suspeita. Sem isto o modelo inventa um número a cada turno e a barra da HUD não significa nada.",
+  "regras_de_suspeita": {
+    "contradiz_evidencia_direta": "+25 a +40",
+    "contradiz_o_que_ele_mesmo_disse_antes": "+20 a +35",
+    "recusa_responder_ou_desvia": "+10 a +18",
+    "detalhe_verificavel_e_coerente": "-8 a -18",
+    "explica_uma_lacuna_de_forma_plausivel": "-12 a -22",
+    "observacao": "Dormir em serviço é falta grave, não é crime: admitir isso NÃO é mentira nem confissão. Usar capa azul com capuz não identifica ninguém, porque o turno inteiro usa. Só marque detectou_mentira quando a fala colidir com uma evidência ou com uma fala anterior do próprio suspeito."
+  },
+  "informacoes_confirmadas": [
+    "Morte entre 02:00 e 03:00 (laudo).",
+    "Rádio de Caio sem resposta entre 01:52 e 02:43 (central de rádio).",
+    "Pessoa de capa azul com capuz ao lado da vítima no Cais 4 às 02:12 (câmera)."
+  ],
+  "informacoes_desconhecidas": [
+    "Onde Caio esteve entre 01:52 e 02:43, com o rádio mudo.",
+    "O que a mulher conversou com Caio às 23:50.",
+    "Quem vestia a capa azul filmada no Cais 4 às 02:12.",
+    "Quem era a mulher e o que ela procurava na pilha B-12."
+  ],
+  "temas_de_interrogatorio": [
+    {
+      "id": "radio_mudo",
+      "descricao": "Onde Caio esteve entre 01:52 e 02:43, com o rádio mudo",
+      "gatilhos": [
+        "radio",
+        "01:52",
+        "01h52",
+        "02:43",
+        "02h43",
+        "dormi",
+        "dormindo",
+        "cochilo",
+        "cochilei",
+        "descanso",
+        "descansando",
+        "conteiner de descanso",
+        "pausa",
+        "intervalo",
+        "onde estava",
+        "onde o senhor estava",
+        "onde voce estava"
+      ],
+      "pergunta_modelo": "Entre 01h52 e 02h43 o seu rádio ficou mudo. Onde exatamente o senhor estava nesse tempo, e alguém pode confirmar?",
+      "prioridade": 10
+    },
+    {
+      "id": "conversa_vitima",
+      "descricao": "A conversa com a mulher de capa amarela às 23:50",
+      "gatilhos": [
+        "mulher",
+        "moca",
+        "capa amarela",
+        "amarela",
+        "23:50",
+        "23h50",
+        "conversei",
+        "conversando",
+        "conversa",
+        "informacao",
+        "perguntou",
+        "b 12",
+        "b12",
+        "pilha"
+      ],
+      "pergunta_modelo": "O senhor foi visto conversando com uma mulher de capa amarela perto do Pátio B por volta das 23h50. O que ela queria?",
+      "prioridade": 20
+    },
+    {
+      "id": "coletor_dados",
+      "descricao": "O coletor de dados sem nenhuma leitura",
+      "gatilhos": [
+        "coletor",
+        "leitor",
+        "leitura",
+        "codigo de barras",
+        "conferencia",
+        "conferindo",
+        "trabalhando",
+        "patio b",
+        "servico"
+      ],
+      "pergunta_modelo": "Seu coletor de dados não registrou nenhuma leitura entre 01h49 e 02h47. Se o senhor estava trabalhando, por que não há registro?",
+      "prioridade": 30
+    },
+    {
+      "id": "capa_numero_17",
+      "descricao": "A capa de chuva número 17",
+      "gatilhos": [
+        "capa",
+        "capuz",
+        "encapuzad",
+        "numero 17",
+        "gancho",
+        "pendurei",
+        "pendurada",
+        "sumiu",
+        "roubaram",
+        "vestiario",
+        "reserva"
+      ],
+      "pergunta_modelo": "Em que momento daquela madrugada o senhor se separou da sua capa de chuva, e onde ela ficou?",
+      "prioridade": 40
+    },
+    {
+      "id": "cais_4",
+      "descricao": "O Cais 4 e a figura encapuzada da câmera",
+      "gatilhos": [
+        "cais",
+        "camera",
+        "filmado",
+        "filmou",
+        "figura",
+        "02:12",
+        "02h12",
+        "agua",
+        "rebocador"
+      ],
+      "pergunta_modelo": "A câmera do Cais 4 filmou alguém de capuz às 02h12. O senhor esteve no Cais 4 em algum momento daquela madrugada?",
+      "prioridade": 50
+    },
+    {
+      "id": "outras_pessoas",
+      "descricao": "Quem mais circulava entre o Pátio B e o Cais 4",
+      "gatilhos": [
+        "supervisor",
+        "wagner",
+        "quem mais",
+        "veiculo",
+        "luz",
+        "alguem",
+        "outra pessoa",
+        "ninguem",
+        "colega",
+        "guindaste",
+        "caminhonete",
+        "farol",
+        "carro",
+        "vulto"
+      ],
+      "pergunta_modelo": "Quem mais circulava entre o Pátio B e o Cais 4 depois da 01h00, e o senhor viu algum veículo ou luz por lá?",
+      "prioridade": 60
+    },
+    {
+      "id": "identidade_vitima",
+      "descricao": "Quem era a mulher e o que ela procurava",
+      "gatilhos": [
+        "quem era",
+        "ja tinha visto",
+        "procurava",
+        "nome dela",
+        "conhecia",
+        "nunca vi",
+        "visitante",
+        "ana souza",
+        "cracha",
+        "celular",
+        "fotos"
+      ],
+      "pergunta_modelo": "O senhor já tinha visto essa mulher antes daquela noite, ou faz ideia do que ela procurava no terminal?",
+      "prioridade": 70
+    }
+  ]
+}

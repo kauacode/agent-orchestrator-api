@@ -1,0 +1,350 @@
+{
+  "case_id": "CASO 03",
+  "titulo": "O Incêndio da 5ª Rua",
+  "resumo_publico": "Um incêndio criminoso destrói três andares do Edifício Aurora, prédio comercial na 5ª Rua, e deixa três vítimas fatais. A perícia confirma uso de acelerante. O síndico, que voltou ao prédio minutos antes do fogo, é levado para interrogatório.",
+  "abertura": {
+    "_comentario": "Fala de abertura mostrada pelo jogo antes da 1a resposta (CaseInfo.openingLine do cartão CASO 03, na CaseSelectionScene). O estado parte dela: sem isso o detetive nao sabe que ja perguntou sobre a volta ao predio.",
+    "tema": "retorno_predio",
+    "pergunta": "Por que você voltou ao Edifício Aurora às 22h31 da noite de 18 de outubro, vinte minutos antes do incêndio?"
+  },
+  "contexto_geral": "Na noite de 18 de outubro, um incêndio destruiu do 1º ao 3º andar do Edifício Aurora, na 5ª Rua. O prédio tem no térreo a portaria com câmera, a garagem e a relojoaria do síndico; no 1º andar, uma clínica odontológica em reforma; no 2º, a sala 201, de um representante de tintas e solventes; no 3º, um ateliê de costura. O alarme disparou às 22:52 e os bombeiros chegaram às 23:06. Morreram Lauro Menezes, da sala 201, e as costureiras Dalva Ribeiro e Sônia Prado, que faziam serão no 3º andar. Heitor Vasconcelos, relojoeiro e síndico, entrou no prédio às 22:31 e saiu às 22:44.",
+  "local_e_periodo": {
+    "local": "Edifício Aurora, 5ª Rua — do 1º ao 3º andar",
+    "periodo_do_crime": "noite de 18 de outubro; alarme de incêndio às 22:52",
+    "descoberta": "22:52 (alarme); bombeiros no local às 23:06"
+  },
+  "papel_do_jogador": {
+    "nome": "Heitor Vasconcelos",
+    "funcao": "Relojoeiro, dono da relojoaria do térreo e síndico do Edifício Aurora",
+    "situacao": "Suspeito principal. Voltou ao prédio minutos antes do fogo, guarda a chave da porta de emergência, que estava trancada, aumentou o seguro da loja semanas antes e brigava com uma das vítimas.",
+    "instrucao_ao_detetive": "O interlocutor É o suspeito, não uma testemunha. Trate-o como tal: nada de 'cidadão' ou 'testemunha'. Chame-o de Heitor ou 'senhor Vasconcelos'."
+  },
+  "vitima": {
+    "nome": "Lauro Menezes, Dalva Ribeiro e Sônia Prado",
+    "idade": "58, 61 e 34",
+    "funcao": "respectivamente, representante comercial da sala 201, dona e costureira do ateliê do 3º andar",
+    "historico": "Lauro vendia tintas e solventes e estocava galões na sala 201, contra as regras do prédio. Estava endividado e devia oito meses de condomínio. Dalva tinha o ateliê havia 15 anos; Sônia trabalhava com ela. As duas faziam serão para entregar uma encomenda.",
+    "como_foi_morto": "Intoxicação por fumaça. A escada principal tomou fumaça e a porta de emergência dos fundos estava acorrentada."
+  },
+  "relacoes": [
+    {
+      "entre": "Heitor Vasconcelos e Lauro Menezes",
+      "natureza": "Síndico e condômino em conflito: ação de cobrança de condomínio e briga na assembleia de 5 de outubro por causa dos galões de solvente."
+    },
+    {
+      "entre": "Heitor Vasconcelos e Dalva Ribeiro",
+      "natureza": "Vizinhos de prédio há 15 anos, em bons termos. Ela tinha o celular dele, como todos os condôminos."
+    },
+    {
+      "entre": "Lauro Menezes e o incêndio",
+      "natureza": "Foi ele quem ateou o fogo para receber o seguro e morreu na tentativa de fugir (só o detetive-IA conhece isso)."
+    }
+  ],
+  "_comentario_verdade": "Isto é o que DE FATO aconteceu. Serve para julgar as falas do suspeito. O detetive NUNCA revela nada daqui que não esteja também em evidencias_conhecidas.",
+  "verdade": {
+    "culpado": "Lauro Menezes, da sala 201 — que morreu no próprio incêndio",
+    "jogador_e_culpado": false,
+    "o_que_aconteceu": "Lauro Menezes, afundado em dívidas, aumentou o seguro do conteúdo da sala 201 e entrou pela garagem às 21:42 para incendiá-la com o próprio estoque de solvente. Ficou escondido no escuro enquanto preparava o fogo. Às 22:19, Dalva sentiu o cheiro forte na escada e ligou para o síndico. Heitor voltou às 22:31, bateu na sala 201 (luz apagada, ninguém respondeu), atribuiu o cheiro ao verniz da reforma da clínica do 1º andar, disse às costureiras que abrissem a janela e saiu às 22:44 sem tirar o cadeado que ele mesmo passava toda noite na porta de emergência desde um arrombamento. Às 22:47, Lauro ateou fogo; o incêndio subiu mais rápido do que ele esperava pela escada principal, ele correu para a porta de emergência dos fundos, encontrou-a acorrentada e morreu ali. Dalva e Sônia morreram presas no 3º andar. Heitor não ateou o fogo, mas o cadeado e o alerta ignorado pesam sobre ele.",
+    "linha_do_tempo": [
+      {
+        "hora": "21:10",
+        "fato": "Heitor fecha a relojoaria."
+      },
+      {
+        "hora": "21:30",
+        "fato": "Heitor passa corrente e cadeado na barra da porta de emergência dos fundos, como faz toda noite desde o arrombamento de 27 de setembro, e vai a pé para casa, a quatro quadras."
+      },
+      {
+        "hora": "21:42",
+        "fato": "Lauro entra pela garagem, sem câmera, com o controle remoto da sala 201, e sobe para a sala com as luzes apagadas."
+      },
+      {
+        "hora": "22:19",
+        "fato": "Dalva liga para Heitor (2 minutos) e reclama de um cheiro forte de solvente na escada."
+      },
+      {
+        "hora": "22:31",
+        "fato": "Heitor entra pela portaria."
+      },
+      {
+        "hora": "22:36",
+        "fato": "Heitor bate na sala 201, ninguém responde; ele conclui que o cheiro é o verniz da reforma da clínica, sobe ao 3º andar e diz às costureiras que abram a janela."
+      },
+      {
+        "hora": "22:44",
+        "fato": "Heitor sai pela portaria e volta para casa. Não tira o cadeado."
+      },
+      {
+        "hora": "22:47",
+        "fato": "Lauro espalha solvente pela sala 201 e ateia fogo."
+      },
+      {
+        "hora": "22:52",
+        "fato": "O alarme de incêndio dispara. Lauro foge pela escada dos fundos e morre junto à porta acorrentada; Dalva e Sônia ficam presas no 3º andar."
+      },
+      {
+        "hora": "23:06",
+        "fato": "Os bombeiros chegam."
+      }
+    ],
+    "motivacoes": {
+      "Lauro Menezes": "Receber o seguro da sala 201, aumentado para R$ 400 mil dez dias antes, e se livrar de uma dívida protestada de R$ 180 mil.",
+      "Heitor Vasconcelos": "Aparentes: o seguro da relojoaria, aumentado depois do arrombamento, e a briga com Lauro. Na verdade não tinha motivo; o que esconde é ter trancado a saída de emergência e ter desprezado o aviso de Dalva."
+    },
+    "segredos_que_nao_devem_ser_revelados_antes_da_hora": [
+      "Que Lauro ateou o fogo e morreu tentando fugir pela porta trancada.",
+      "Que Lauro estava escondido na sala 201 quando Heitor bateu.",
+      "Que o seguro da sala 201 foi aumentado e que Lauro estava endividado.",
+      "Que Lauro entrou pela garagem às 21:42."
+    ],
+    "contradicoes_que_o_suspeito_pode_gerar": [
+      "Dizer que não voltou ao prédio depois de fechar a loja (a câmera registra a entrada às 22:31 e a saída às 22:44).",
+      "Dizer que não falou com Dalva naquela noite (há a ligação das 22:19).",
+      "Dizer que a porta de emergência estava aberta ou que não sabe quem a trancou (a chave do cadeado fica com o síndico).",
+      "Dizer que voltou por outro motivo e depois mencionar o cheiro, ou o contrário.",
+      "Dizer que entrou na sala 201 ou falou com Lauro (a sala estava trancada e ninguém respondeu)."
+    ],
+    "condicoes_para_resolver": "O suspeito é inocente do incêndio. O caso se resolve a favor dele quando sustenta, sem se contradizer, que voltou ao prédio por causa da ligação de Dalva sobre o cheiro, que bateu na sala 201 sem resposta, que achou ser o verniz da reforma e saiu às 22:44, antes do fogo — e quando admite que o cadeado era dele, por segurança depois do arrombamento, como negligência e não como parte de um plano. Apontar a sala 201 e os galões de Lauro é o caminho para virar a suspeita, e as evidências que confirmam isso só chegam nos últimos turnos."
+  },
+  "conhecimento_do_suspeito": {
+    "_comentario": "O que Heitor Vasconcelos (o jogador) sabe/viveu. O detetive-IA NÃO deve presumir nada daqui além do que ele declarar.",
+    "sabe": [
+      "Que fechou a relojoaria às 21:10 e passou o cadeado na porta de emergência às 21:30, como toda noite desde o arrombamento de 27 de setembro.",
+      "Que Dalva ligou às 22:19 reclamando de cheiro forte na escada.",
+      "Que voltou às 22:31, bateu na sala 201 sem resposta, achou que era o verniz da reforma da clínica e mandou as costureiras abrirem a janela.",
+      "Que saiu às 22:44 sem tirar o cadeado e soube do incêndio em casa, por um vizinho."
+    ],
+    "nao_sabe": [
+      "Que Lauro estava dentro da sala 201.",
+      "Quem ateou o fogo.",
+      "Que a garagem foi aberta às 21:42."
+    ],
+    "pode_ter_notado": "Uma luz fraca de celular por baixo da porta da sala 201 quando bateu — só se o jogador decidir inventar/contar."
+  },
+  "_comentario_evidencias": "Isto é o que o detetive TEM EM MÃOS. É a única coisa que ele pode citar, mostrar ou usar para pressionar.",
+  "evidencias_conhecidas": [
+    {
+      "id": "acelerante",
+      "descricao": "A perícia confirmou uso de acelerante, um solvente à base de tolueno. O alarme de incêndio disparou às 22:52.",
+      "fonte": "Perícia de incêndio",
+      "a_partir_do_turno": 1
+    },
+    {
+      "id": "camera_retorno",
+      "descricao": "A câmera da portaria registra Heitor Vasconcelos entrando às 22:31 e saindo às 22:44, oito minutos antes do alarme.",
+      "fonte": "Câmera da portaria",
+      "a_partir_do_turno": 1
+    },
+    {
+      "id": "porta_acorrentada",
+      "descricao": "A porta de emergência dos fundos estava acorrentada com cadeado na barra antipânico, pelo lado de dentro. A chave do cadeado fica com o síndico.",
+      "fonte": "Corpo de Bombeiros",
+      "a_partir_do_turno": 2
+    },
+    {
+      "id": "seguro_relojoaria",
+      "descricao": "O seguro da relojoaria de Heitor foi aumentado em 60% três semanas antes do incêndio.",
+      "fonte": "Seguradora",
+      "a_partir_do_turno": 3
+    },
+    {
+      "id": "ata_assembleia",
+      "descricao": "Ata da assembleia de 5 de outubro: Heitor exigiu que Lauro Menezes tirasse da sala 201 os galões de solvente que estocava, 'antes que o prédio pegue fogo'. Os dois tinham uma ação de cobrança de condomínio em andamento.",
+      "fonte": "Livro de atas do condomínio",
+      "a_partir_do_turno": 4
+    },
+    {
+      "id": "ligacao_dalva",
+      "descricao": "O celular de Dalva Ribeiro, uma das vítimas, ligou para o celular de Heitor às 22:19. A ligação durou 2 minutos.",
+      "fonte": "Registro da operadora",
+      "a_partir_do_turno": 5
+    },
+    {
+      "id": "foco_sala_201",
+      "descricao": "A perícia localizou o foco inicial do fogo na sala 201, no 2º andar, com marcas de derramamento de líquido. A relojoaria, no térreo, foi atingida depois.",
+      "fonte": "Perícia de incêndio",
+      "a_partir_do_turno": 6
+    },
+    {
+      "id": "corpo_lauro",
+      "descricao": "O corpo de Lauro Menezes foi encontrado no térreo, junto à porta de emergência acorrentada, e não na sala 201.",
+      "fonte": "Corpo de Bombeiros",
+      "a_partir_do_turno": 7
+    },
+    {
+      "id": "seguro_sala_201",
+      "descricao": "O seguro do conteúdo da sala 201 foi aumentado para R$ 400 mil dez dias antes do incêndio. Lauro tinha uma dívida protestada de R$ 180 mil.",
+      "fonte": "Seguradora e cartório",
+      "a_partir_do_turno": 8
+    },
+    {
+      "id": "garagem_2142",
+      "descricao": "O portão da garagem, que não tem câmera, foi aberto às 21:42 com o controle remoto cadastrado para a sala 201.",
+      "fonte": "Central do portão eletrônico",
+      "a_partir_do_turno": 9
+    }
+  ],
+  "_comentario_lacunas": "O que o detetive NÃO sabe. É isto que ele tenta arrancar no interrogatório — e o que torna o jogo jogável.",
+  "lacunas": [
+    "Por que Heitor voltou ao prédio às 22:31 e o que fez lá dentro até 22:44.",
+    "Quem acorrentou a porta de emergência e por quê.",
+    "O que Dalva disse a Heitor na ligação das 22:19.",
+    "Se havia mais alguém no prédio além das costureiras.",
+    "Onde Heitor estava quando o fogo começou."
+  ],
+  "_comentario_suspeita": "Âncoras para o nivel_suspeita. Sem isto o modelo inventa um número a cada turno e a barra da HUD não significa nada.",
+  "regras_de_suspeita": {
+    "contradiz_evidencia_direta": "+30 a +40",
+    "contradiz_o_que_ele_mesmo_disse_antes": "+25 a +35",
+    "recusa_responder_ou_desvia": "+12 a +20",
+    "detalhe_verificavel_e_coerente": "-5 a -15",
+    "explica_uma_lacuna_de_forma_plausivel": "-10 a -20",
+    "observacao": "Acorrentar a porta de emergência é negligência grave, não é atear fogo: admitir o cadeado NÃO é mentira nem confissão do incêndio. Ter voltado ao prédio também não é crime. Só marque detectou_mentira quando a fala colidir com uma evidência ou com uma fala anterior do próprio suspeito."
+  },
+  "informacoes_confirmadas": [
+    "Uso de acelerante à base de tolueno (perícia).",
+    "Entrada de Heitor às 22:31 e saída às 22:44 (câmera da portaria).",
+    "Alarme de incêndio às 22:52."
+  ],
+  "informacoes_desconhecidas": [
+    "Por que Heitor voltou ao prédio às 22:31 e o que fez lá dentro até 22:44.",
+    "Quem acorrentou a porta de emergência e por quê.",
+    "O que Dalva disse a Heitor na ligação das 22:19.",
+    "Se havia mais alguém no prédio além das costureiras.",
+    "Onde Heitor estava quando o fogo começou."
+  ],
+  "temas_de_interrogatorio": [
+    {
+      "id": "retorno_predio",
+      "descricao": "Por que Heitor voltou ao prédio às 22:31 e o que fez até 22:44",
+      "gatilhos": [
+        "voltei",
+        "voltou",
+        "retornei",
+        "22:31",
+        "22h31",
+        "22:44",
+        "22h44",
+        "entrei",
+        "subi",
+        "por que voltou",
+        "la dentro"
+      ],
+      "pergunta_modelo": "Por que o senhor voltou ao Edifício Aurora às 22h31, e o que fez lá dentro até sair, às 22h44?",
+      "prioridade": 10
+    },
+    {
+      "id": "porta_emergencia",
+      "descricao": "A corrente e o cadeado na porta de emergência",
+      "gatilhos": [
+        "cadeado",
+        "corrente",
+        "acorrentad",
+        "porta de emergencia",
+        "emergencia",
+        "porta dos fundos",
+        "fundos",
+        "tranquei",
+        "trancada",
+        "barra antipanico",
+        "arrombamento",
+        "assalto"
+      ],
+      "pergunta_modelo": "A porta de emergência estava acorrentada, e a chave do cadeado fica com o senhor. Quem a trancou, e por quê?",
+      "prioridade": 20
+    },
+    {
+      "id": "seguro_loja",
+      "descricao": "O aumento do seguro da relojoaria",
+      "gatilhos": [
+        "seguro",
+        "apolice",
+        "seguradora",
+        "indenizacao",
+        "relojoaria",
+        "loja",
+        "prejuizo"
+      ],
+      "pergunta_modelo": "O seguro da sua relojoaria subiu 60% três semanas antes do incêndio. Por que o senhor aumentou a apólice?",
+      "prioridade": 30
+    },
+    {
+      "id": "conflito_lauro",
+      "descricao": "A briga com Lauro Menezes por causa da sala 201",
+      "gatilhos": [
+        "lauro",
+        "menezes",
+        "condominio",
+        "assembleia",
+        "processo",
+        "cobranca",
+        "solvente",
+        "galao",
+        "galoes",
+        "sala 201",
+        "201"
+      ],
+      "pergunta_modelo": "O senhor e Lauro Menezes brigavam por causa dos galões de solvente e do condomínio atrasado. Até onde ia essa briga?",
+      "prioridade": 40
+    },
+    {
+      "id": "ligacao_dalva",
+      "descricao": "A ligação de Dalva às 22:19",
+      "gatilhos": [
+        "dalva",
+        "ligacao",
+        "ligou",
+        "telefonema",
+        "telefone",
+        "celular",
+        "22:19",
+        "22h19",
+        "cheiro",
+        "verniz",
+        "costureira",
+        "atelie"
+      ],
+      "pergunta_modelo": "Às 22h19 o senhor recebeu uma ligação de Dalva Ribeiro. O que ela disse, e o que o senhor fez a respeito?",
+      "prioridade": 50
+    },
+    {
+      "id": "outras_pessoas",
+      "descricao": "Quem mais estava no prédio ou tinha acesso a ele",
+      "gatilhos": [
+        "garagem",
+        "portao",
+        "controle remoto",
+        "alguem",
+        "outra pessoa",
+        "ninguem",
+        "luz",
+        "barulho",
+        "segundo andar",
+        "clinica",
+        "reforma"
+      ],
+      "pergunta_modelo": "Quando o senhor esteve lá dentro, viu, ouviu ou percebeu mais alguém no prédio? Quem mais tem acesso pela garagem?",
+      "prioridade": 60
+    },
+    {
+      "id": "paradeiro_incendio",
+      "descricao": "Onde Heitor estava quando o fogo começou, depois das 22:44",
+      "gatilhos": [
+        "em casa",
+        "depois de sair",
+        "para onde",
+        "ficou sabendo",
+        "fui para casa",
+        "fui embora",
+        "22:52",
+        "22h52",
+        "alarme",
+        "bombeiros",
+        "sirene",
+        "vizinho"
+      ],
+      "pergunta_modelo": "Depois de sair, às 22h44, para onde o senhor foi, e como ficou sabendo do incêndio?",
+      "prioridade": 70
+    }
+  ]
+}
