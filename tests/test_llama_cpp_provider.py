@@ -420,3 +420,14 @@ def test_fala_copiada_do_exemplo_do_prompt_e_refeita():
 
         assert resultado["texto_detetive"] == "Prossiga com o seu relato, por favor."
         assert len(falso.chamadas) == 2
+
+
+def test_analise_interna_nao_vaza_na_fala():
+    """Visto em jogo: a fala do Qwen terminava em 'Detectou_mentira: true, suspeita sobe +25.'"""
+    limpa = PromptOrchestrator._sem_metadados
+    original = ("Entendo que você estava no prédio. No entanto, seu crachá registra saída às 20:48. "
+                "Isso colide com a informação que você deu. Detectou_mentira: true, suspeita sobe +25.")
+    assert limpa(original) == ("Entendo que você estava no prédio. No entanto, seu crachá registra saída às 20:48. "
+                               "Isso colide com a informação que você deu.")
+    assert limpa("Nível de suspeita: 80.") == ""          # nada sobra: a fala sera refeita
+    assert limpa("O senhor mentiu sobre o horário?") == "O senhor mentiu sobre o horário?"
