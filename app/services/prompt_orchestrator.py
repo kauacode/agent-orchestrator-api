@@ -795,11 +795,14 @@ Responda com JSON puro (sem ```json):
             sobrenome = caso.get("papel_do_jogador", {}).get("nome", "").split()[-1:]
             if sobrenome:
                 nome = f"senhor {sobrenome[0]}"
+        # Vitima e local vem do caso: com o nome fixo do caso 01, a confissao
+        # em qualquer outro caso citava a vitima e o lugar errados.
+        vitima = (caso or {}).get("vitima", {}).get("nome", "")
 
         reacao = {
-            CONFISSAO: (f"O {nome} está dizendo que matou Otávio Lisboa? Então me conte como foi: "
-                        "com o quê, onde na gráfica e o que fez logo depois."
-                        if caso else "O senhor está dizendo que cometeu o crime? Então me conte como foi."),
+            CONFISSAO: (f"O {nome} está dizendo que matou {vitima}? Então me conte como foi: "
+                        "com o quê, onde exatamente e o que fez logo depois."
+                        if vitima else "O senhor está dizendo que cometeu o crime? Então me conte como foi."),
             NEGACAO: f"Entendo que o {nome} nega. Mas preciso que isso se sustente.",
             EVASIVA: f"Esquivar-se não ajuda, {nome}.",
             AMBIGUA: f"Não ficou claro, {nome}. Seja direto.",
