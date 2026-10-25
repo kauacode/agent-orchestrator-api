@@ -663,7 +663,8 @@ Responda com JSON puro (sem ```json):
                 await asyncio.sleep(0.1)
                 continue
 
-            texto = dados['texto_detetive']
+            texto = self._sem_metadados(dados['texto_detetive'])
+            dados['texto_detetive'] = texto
 
             if self._fala_e_exemplo(texto):
                 # Visto na validacao com o Qwen 2.5 3B: a fala veio literalmente
@@ -720,6 +721,27 @@ Responda com JSON puro (sem ```json):
             resultado['texto_detetive'] = self._sem_saudacao(resultado.get('texto_detetive', ''))
         self._limitar_faixas(resultado)
         return resultado
+
+    # Termos da análise INTERNA que o modelo às vezes escreve dentro da fala.
+    _METADADOS = re.compile(
+        r"detectou[_ ]?mentira|n[íi]vel[_ ]?(de[_ ])?suspeita|status_investigacao|"
+        r"congelar_input|fim_de_jogo|feedback_visual|cor_iluminacao|bpm_musica|"
+        r"animacao_trigger|id_turno|suspeita\s+(sobe|desce|aumenta|diminui|cai)",
+        re.IGNORECASE)
+    _FRASES = re.compile(r"[^.!?]+[.!?]*")
+
+    @classmethod
+    def _sem_metadados(cls, texto: str) -> str:
+        """
+        Tira da fala as frases com a análise interna. Visto em jogo com o Qwen
+        2.5 3B: a fala terminava em "Detectou_mentira: true, suspeita sobe +25."
+        e o jogador lia isso na prancheta. Sobra só o que o detetive diria;
+        se não sobrar nada, _fala_e_exemplo recusa e a fala é refeita.
+        """
+        if not texto or not cls._METADADOS.search(texto):
+            return texto
+        frases = [f.strip() for f in cls._FRASES.findall(texto) if f.strip()]
+        return " ".join(f for f in frases if not cls._METADADOS.search(f))
 
     @staticmethod
     def _fala_e_exemplo(texto: str) -> bool:
