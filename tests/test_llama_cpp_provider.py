@@ -431,3 +431,49 @@ def test_analise_interna_nao_vaza_na_fala():
                                "Isso colide com a informação que você deu.")
     assert limpa("Nível de suspeita: 80.") == ""          # nada sobra: a fala sera refeita
     assert limpa("O senhor mentiu sobre o horário?") == "O senhor mentiu sobre o horário?"
+
+
+def _roteiro(falso, respostas):
+    """Faz o llama falso devolver uma resposta diferente a cada chamada."""
+    criar_original = falso.create_chat_completion
+
+    def roteiro(self, **kwargs):
+        texto = respostas[min(len(falso.chamadas), len(respostas) - 1)]
+        falso.conteudo = json.dumps(
+            {"texto_detetive": texto,
+             "status_investigacao": {"nivel_suspeita": 30, "detectou_mentira": False},
+             "feedback_visual": {"cor_iluminacao": "#AA3333", "bpm_musica": 100, "animacao_trigger": "N"}})
+        return criar_original(self, **kwargs)
+
+    falso.create_chat_completion = roteiro
+    return criar_original
+
+
+def test_fala_com_ideogramas_e_refeita():
+    """Visto no caso 03: 'há uma questão que preciso澄清: você mencionou...'"""
+    with _llama_cpp_falso() as falso:
+        original = _roteiro(falso, ["Há uma questão que preciso澄清: onde o senhor estava?",
+                                    "Prossiga com o seu relato, por favor."])
+        try:
+            provider = LlamaCppProvider(model_path=str(GGUF_FALSO))
+            req = InterrogateRequest(session_id=_sessao_limpa("llamacpp_ideograma"), player_text="Eu estava em casa.")
+            resultado = asyncio.run(interrogate(req, provider=provider))
+        finally:
+            falso.create_chat_completion = original
+
+        assert resultado["texto_detetive"] == "Prossiga com o seu relato, por favor."
+        assert len(falso.chamadas) == 2
+
+
+def test_ideogramas_insistentes_saem_da_fala():
+    """Se o modelo insistir, a fala vai sem os ideogramas em vez do fallback generico."""
+    with _llama_cpp_falso() as falso:
+        original = _roteiro(falso, ["Há uma questão que preciso澄清: onde o senhor estava?"])
+        try:
+            provider = LlamaCppProvider(model_path=str(GGUF_FALSO))
+            req = InterrogateRequest(session_id=_sessao_limpa("llamacpp_ideograma2"), player_text="Eu estava em casa.")
+            resultado = asyncio.run(interrogate(req, provider=provider))
+        finally:
+            falso.create_chat_completion = original
+
+        assert resultado["texto_detetive"] == "Há uma questão que preciso: onde o senhor estava?"

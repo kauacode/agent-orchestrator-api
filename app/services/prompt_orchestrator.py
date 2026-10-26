@@ -642,6 +642,7 @@ Responda com JSON puro (sem ```json):
         repetida = None          # fala identica a uma anterior (ainda serve em ultimo caso)
         tema_repetido = None     # fala valida, mas pergunta de novo um tema esclarecido
         corrigido_por_tema = False
+        ideograma = None         # fala com chines/japones/coreano, ja limpa (ultimo caso)
 
         # tenta gerar e faz retry se o json vier fora do contrato
         while tentativas <= 2:
@@ -672,6 +673,17 @@ Responda com JSON puro (sem ```json):
                 # modelo de JSON do prompt. Contrato valido, mas o jogador veria
                 # o placeholder na prancheta.
                 logger.warning(f"Provedor {provider.nome} copiou o exemplo do prompt; tentando de novo.")
+                tentativas += 1
+                continue
+
+            if self._IDEOGRAMAS.search(texto):
+                # Visto no caso 03 com o Qwen 2.5 3B: "há uma questão que
+                # preciso澄清: ..." — o modelo chinês troca de idioma no meio da
+                # frase. Uma nova tentativa; se insistir, a fala sem os
+                # ideogramas ainda é melhor que o fallback genérico.
+                logger.warning(f"Provedor {provider.nome} escreveu em outro alfabeto; tentando de novo.")
+                if ideograma is None:
+                    ideograma = dict(dados, texto_detetive=self._sem_ideogramas(texto))
                 tentativas += 1
                 continue
 
@@ -711,7 +723,7 @@ Responda com JSON puro (sem ```json):
             # Mantem a leitura de suspeita do modelo, troca so a fala.
             resultado = tema_repetido
             resultado['texto_detetive'] = self._fala_deterministica(caso, temas, trabalho, interp, fatos)
-        resultado = resultado or repetida
+        resultado = resultado or repetida or ideograma
 
         # se der erro em todas as tentativas, usa a resposta fallback
         if not resultado:
@@ -742,6 +754,17 @@ Responda com JSON puro (sem ```json):
             return texto
         frases = [f.strip() for f in cls._FRASES.findall(texto) if f.strip()]
         return " ".join(f for f in frases if not cls._METADADOS.search(f))
+
+    # CJK, kana, hangul e pontuacao de largura cheia: nada disso existe numa
+    # fala em portugues.
+    _IDEOGRAMAS = re.compile(
+        r"[　-〿぀-ヿ㐀-䶿一-鿿가-힯＀-￯]+")
+
+    @classmethod
+    def _sem_ideogramas(cls, texto: str) -> str:
+        limpo = cls._IDEOGRAMAS.sub(" ", texto)
+        limpo = re.sub(r"\s+([,.:;!?])", r"\1", limpo)
+        return re.sub(r"\s{2,}", " ", limpo).strip()
 
     @staticmethod
     def _fala_e_exemplo(texto: str) -> bool:
